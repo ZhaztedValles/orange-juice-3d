@@ -20,7 +20,8 @@ cd /tmp
 curl -fsSL --retry 5 -o oj-wheels.tar "$URL/oj-writer-wheels-py311.tar"
 echo "$SHA  oj-wheels.tar" | sha256sum -c -
 tar -xf oj-wheels.tar                      # -> /tmp/wheels/*.whl
-python -m pip install -q --no-index --find-links /tmp/wheels \
+# --ignore-installed: Debian's own PyYAML 6.0.1 has no RECORD file and cannot be uninstalled
+python -m pip install -q --no-index --ignore-installed --find-links /tmp/wheels \
   torch==2.15.0 numpy==2.3.4 scipy==1.16.3 soundfile==0.13.1 pyyaml==6.0.3 pytest==8.4.2 pillow==12.3.0 \
   google-api-python-client==2.185.0 google-auth==2.41.1 tzdata==2026.6 \
   kokoro==0.9.4 "misaki[en]==0.9.4" en_core_web_sm==3.8.0
