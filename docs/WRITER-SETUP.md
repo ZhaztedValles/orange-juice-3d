@@ -16,6 +16,18 @@ If it is ever deleted, recreate it with exactly these values.
 Both repositories must be in the routine: the writer looks for `orange-juice-refs` next to `orange-juice-3d` and stops
 if it is missing. The refs repo stays private; the writer only reads it.
 
+## The cloud environment (one time)
+
+The routine runs in a Claude cloud environment. Set it up once so the heavy installs (PyTorch, the Kokoro voice model)
+are cached instead of downloaded every night:
+
+1. claude.ai/code → the environment picker → edit the routine's environment.
+2. **Network access:** Full.
+3. **Environment variables:** add `HF_HOME=/opt/hf-cache`.
+4. **Setup script:** paste the whole of [`docs/writer-env-setup.sh`](writer-env-setup.sh). It installs everything
+   system-wide; the disk is then snapshotted and reused by later runs (rebuilt when the script changes or after about
+   7 days). WRITER.md's own install commands then finish in seconds ("already satisfied").
+
 ## Where to create it
 
 claude.ai/code → **Routines** → **New routine** → fill in the values above → **Create**.
