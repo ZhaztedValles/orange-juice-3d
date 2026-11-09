@@ -5,7 +5,9 @@ Usage:
       checks `git diff --name-status --no-renames <base>...<head>` against the path rules below, then (unless
       --paths-only) every touched video folder of the working tree (the merged tree in the workflow) with
       video_check.problems, and the story ledger (ledger.problems on stories/ledger.yml and banned.yml when either is changed;
-      ledger.video_problems: every touched video that is not a template needs exactly one coded ledger entry). Prints `accepted: ...` (exit 0) or the problems (exit 1).
+      ledger.change_problems against main's copies (append-only ledger, banned list only grows, new entries not
+      repeats or banned) when either is changed or a non-template video is touched;
+      ledger.video_problems: every touched video other than 000-bridge needs exactly one coded ledger entry). Prints `accepted: ...` (exit 0) or the problems (exit 1).
       --videos-out writes "<id> <FRAMES>" per touched video folder, for the smoke stills.
   python tools/accept_check.py --branch REF
       exit 0 when REF is a writer branch name (claude/oj-<[A-Za-z0-9._-]+>), 1 otherwise.
@@ -339,6 +341,39 @@ def main_facts(base, repo):
     return existing, held_ids(states, posted)
 
 
+def _base_list(base, path, repo, ledger):
+    """the YAML list in `path` at commit `base` ([] when the file is missing there)"""
+    if not _exists(base, path, repo):
+        return []
+    return ledger.parse_list(_git("show", f"{base}:{path}", repo=repo), f"{path} on main")
+
+
+def story_problems(base, repo, changed, vids, ledger):
+    """the story files read from the merged tree (the working tree) and compared with main's copies (`base`):
+    both files valid and append-only with the banned list kept (when a story file is touched), every new entry
+    (and every idea that became coded) not a repeat or banned, and every touched non-template video with exactly
+    one coded ledger entry. Never raises: anything unexpected is a rejection."""
+    try:
+        errs = []
+        stories_touched = any(STORIES_RE.fullmatch(path) and st != "D" for st, path in changed)
+        videos = [v for v in vids if v != TEMPLATE and (repo / "videos" / v).is_dir()]
+        try:
+            entries, banned = ledger.load(repo)
+        except ValueError as e:
+            return [f"stories: {e}"]
+        if stories_touched:
+            errs += [f"stories: {p}" for p in ledger.problems(entries, banned)]
+        if stories_touched or videos:
+            errs += [f"stories: {p}" for p in ledger.change_problems(
+                _base_list(base, "stories/ledger.yml", repo, ledger), _base_list(base, "stories/banned.yml", repo, ledger),
+                entries, banned)]
+        for vid in videos:
+            errs += [f"videos/{vid}: {p}" for p in ledger.video_problems(vid, entries)]
+        return list(dict.fromkeys(errs))
+    except Exception as e:  # noqa: BLE001 - a content rejection, never a traceback
+        return [f"stories: cannot check the story files ({' '.join(str(e).split()) or type(e).__name__})"]
+
+
 def main(argv):
     if argv[:1] == ["--branch"] and len(argv) == 2:
         ok = branch_ok(argv[1])
@@ -391,19 +426,7 @@ def main(argv):
         from audio import spec
         for vid in vids:
             errs += [f"videos/{vid}: {p}" for p in video_check.problems(repo / "videos" / vid)]
-        # the story ledger and banned list, read from the merged tree: both files valid, and every touched
-        # non-template video has exactly one coded ledger entry
-        entries = banned = None
-        try:
-            entries, banned = ledger.load(repo)
-        except ValueError as e:
-            errs.append(f"stories: {e}")
-        if entries is not None:
-            if any(STORIES_RE.fullmatch(path) and st != "D" for st, path in changed):
-                errs += [f"stories: {p}" for p in ledger.problems(entries, banned)]
-            for vid in vids:
-                if (repo / "videos" / vid).is_dir() and not video_check.is_template(repo / "videos" / vid):
-                    errs += [f"videos/{vid}: {p}" for p in ledger.video_problems(vid, entries)]
+        errs += story_problems(base, repo, changed, vids, ledger)
         if videos_out and not errs:
             Path(videos_out).write_text("".join(f"{v} {spec.frames(repo / 'videos' / v)}\n" for v in vids),
                                         encoding="utf-8")

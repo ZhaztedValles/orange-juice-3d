@@ -138,3 +138,138 @@ def test_cli():
     r = subprocess.run(cli + ["check", "The Great Molasses Flood hit Boston", "--topics", "molasses"],
                        capture_output=True, text=True)
     assert r.returncode == 1 and r.stdout.startswith("banned:")
+
+
+# --- the story rules a branch's change must keep (append-only ledger, banned list only grows, no repeats) ---
+
+IDEA = {**GOOD, "id": "idea-old", "claim": "A baker in Lisbon invented a clock", "topics": ["lisbon", "clock"],
+        "status": "idea", "video": ""}
+OTHER = {**GOOD, "id": "002-other", "claim": "A sailor in Oslo painted a whale", "topics": ["oslo", "whale"],
+         "video": "002-other"}
+
+
+def test_unchanged_files_have_no_change_problems():
+    assert ledger.change_problems([GOOD, IDEA], BANNED, [GOOD, IDEA], BANNED) == []
+    assert ledger.change_problems([], [], [], []) == []
+
+
+def test_deleted_entry_is_a_problem():
+    p = ledger.change_problems([GOOD, IDEA], BANNED, [GOOD], BANNED)
+    assert len(p) == 1 and "'idea-old'" in p[0] and "deleted" in p[0]
+
+
+def test_edited_claim_is_a_problem():
+    p = ledger.change_problems([GOOD], BANNED, [{**GOOD, "claim": "Something else entirely"}], BANNED)
+    assert len(p) == 1 and "edited" in p[0] and "'claim'" in p[0]
+    assert ledger.change_problems([IDEA], BANNED, [{**IDEA, "topics": ["x"]}], BANNED)       # any field
+    assert ledger.change_problems([GOOD], BANNED, [{**GOOD, "reason": "x"}], BANNED)
+
+
+def test_trimmed_or_edited_banned_is_a_problem():
+    more = BANNED + [{"claim": "A cat painted a ship", "keywords": ["cat", "ship"]}]
+    p = ledger.change_problems([], more, [], BANNED)
+    assert len(p) == 1 and "A cat painted a ship" in p[0] and "gain" in p[0]
+    assert ledger.change_problems([], BANNED, [], [{**BANNED[0], "keywords": ["x"]}])
+    assert ledger.change_problems([], BANNED, [], [])
+    assert ledger.change_problems([], BANNED, [], more) == []                                # gaining is fine
+
+
+def test_allowed_transitions():
+    assert ledger.change_problems([IDEA], BANNED, [{**IDEA, "status": "coded", "video": "003-clock"}], BANNED) == []
+    assert ledger.change_problems([IDEA], BANNED, [{**IDEA, "status": "dropped", "reason": "dull"}], BANNED) == []
+    assert ledger.change_problems([GOOD], BANNED,
+                                  [{**GOOD, "status": "dropped", "reason": "wrong", "video": ""}], BANNED) == []
+
+
+def test_disallowed_transitions():
+    coded_to_idea = {**GOOD, "status": "idea", "video": ""}
+    p = ledger.change_problems([GOOD], BANNED, [coded_to_idea], BANNED)
+    assert len(p) == 1 and "'coded' -> 'idea'" in p[0]
+    dropped = {**IDEA, "status": "dropped", "reason": "dull"}
+    assert ledger.change_problems([dropped], BANNED, [{**dropped, "status": "coded", "video": "003-x"}], BANNED)
+    assert ledger.change_problems([dropped], BANNED, [{**dropped, "status": "idea", "reason": ""}], BANNED)
+    # a drop must give a reason and clear the video
+    assert ledger.change_problems([GOOD], BANNED, [{**GOOD, "status": "dropped", "reason": ""}], BANNED)
+    assert ledger.change_problems([GOOD], BANNED, [{**GOOD, "status": "dropped", "reason": "x"}], BANNED)
+    # coding an idea may not also rewrite the claim
+    assert ledger.change_problems([IDEA], BANNED, [{**IDEA, "status": "coded", "video": "003-x",
+                                                    "claim": "A new claim"}], BANNED)
+
+
+def test_new_entry_repeating_a_banned_claim_is_a_problem():
+    new = {**OTHER, "id": "003-atomic", "claim": "He survived both atomic bombs", "topics": ["japan"]}
+    p = ledger.change_problems([GOOD], BANNED, [GOOD, new], BANNED)
+    assert len(p) == 1 and p[0].startswith("ledger entry '003-atomic': banned:")
+    # a banned entry added in the same change blocks it too
+    added = [{"claim": "A sailor painted a whale", "keywords": ["sailor", "whale"]}]
+    assert ledger.change_problems([GOOD], BANNED, [GOOD, OTHER], BANNED + added)
+    assert ledger.change_problems([GOOD], BANNED, [GOOD, OTHER], BANNED) == []
+
+
+def test_new_entry_repeating_a_past_entry_is_a_problem():
+    same_claim = {**OTHER, "claim": "Soldiers marching in step brought down the iron Broughton bridge"}
+    p = ledger.change_problems([GOOD], BANNED, [GOOD, same_claim], BANNED)
+    assert len(p) == 1 and "same story as '001-dancing-bridge'" in p[0]
+    same_topics = {**OTHER, "topics": ["broughton", "bridge", "soldiers"]}
+    assert "shares 3 topics" in " ".join(ledger.change_problems([GOOD], BANNED, [GOOD, same_topics], BANNED))
+    dropped = {**GOOD, "status": "dropped", "video": "", "reason": "dull", "id": "idea-b"}
+    assert ledger.change_problems([dropped], BANNED, [dropped, same_claim], BANNED)           # dropped ideas count too
+
+
+def test_two_new_entries_repeating_each_other_are_a_problem():
+    a = {**OTHER, "id": "002-a", "video": "002-a"}
+    b = {**OTHER, "id": "003-b", "video": "003-b", "claim": "A sailor in Oslo painted one whale"}
+    p = ledger.change_problems([GOOD], BANNED, [GOOD, a, b], BANNED)
+    assert p and any("'003-b'" in x and "'002-a'" in x for x in p)
+    assert ledger.change_problems([GOOD], BANNED, [GOOD, a], BANNED) == []
+
+
+def test_idea_becoming_coded_is_checked_against_everything_else():
+    clash = {**GOOD, "id": "002-clash", "claim": "Soldiers marching in step brought down the iron Broughton bridge",
+             "topics": ["x"], "status": "idea", "video": ""}
+    coded = {**clash, "status": "coded", "video": "002-clash"}
+    assert ledger.change_problems([GOOD, clash], BANNED, [GOOD, coded], BANNED)
+    # but an old entry that stays an idea is not re-checked (main may hold older near-duplicates)
+    assert ledger.change_problems([GOOD, clash], BANNED, [GOOD, clash], BANNED) == []
+
+
+def test_problem_text_cannot_inject_lines():
+    nasty = {**OTHER, "id": "003-x",
+             "claim": "Soldiers marching in step brought down the iron Broughton bridge\n::error::boom"}
+    out = ledger.change_problems([GOOD], BANNED, [GOOD, nasty], BANNED)
+    assert out and all("\n" not in x for x in out)
+    bad = {**GOOD, "id": "evil\n::error::x"}
+    assert all("\n" not in x for x in ledger.problems([bad], BANNED))
+    assert all("\n" not in x for x in ledger.change_problems([bad], BANNED, [], BANNED))
+    hostile = ledger.check("blue whales sing", ["a"], [{**GOOD, "id": "a\nb", "claim": "blue whales sing"}],
+                           [{"claim": "blue\nwhales sing", "keywords": ["whales"]}])
+    assert hostile and all("\n" not in x for x in hostile)
+
+
+# --- sources: parsing and domains ---
+
+def test_unparseable_url_is_a_problem_not_a_crash():
+    bad = {**GOOD, "sources": ["https://a.org/x", "http://[bad"]}
+    assert any("http(s) URLs" in x for x in ledger.problems([bad], BANNED))
+    assert ledger._domain("http://[bad") == ""
+
+
+def test_registrable_domain():
+    rd = ledger.registrable_domain
+    assert rd("en.wikipedia.org") == rd("de.wikipedia.org") == rd("wikipedia.org") == "wikipedia.org"
+    assert rd("www.bbc.co.uk") == rd("news.bbc.co.uk") == "bbc.co.uk"
+    assert rd("www.abc.net.au") == "abc.net.au" and rd("history.ac.uk") == "history.ac.uk"
+    assert rd("example.com") == "example.com" and rd("localhost") == "localhost"
+    assert rd("foo.co.com") == "co.com" and rd("a.b.example.org") == "example.org"
+    assert rd("127.0.0.1") == "127.0.0.1"
+    assert ledger._domain("https://WWW.Example.COM:8080/x") == "example.com"
+    assert ledger._domain("ftp://example.com") == "" and ledger._domain("https:///x") == ""
+
+
+def test_subdomains_of_one_site_are_not_different_domains():
+    wiki = {**GOOD, "sources": ["https://en.wikipedia.org/wiki/A", "https://de.wikipedia.org/wiki/A"]}
+    assert any("different domains" in x for x in ledger.problems([wiki], BANNED))
+    bbc = {**GOOD, "sources": ["https://www.bbc.co.uk/a", "https://news.bbc.co.uk/b"]}
+    assert any("different domains" in x for x in ledger.problems([bbc], BANNED))
+    ok = {**GOOD, "sources": ["https://www.bbc.co.uk/a", "https://www.itv.co.uk/b"]}
+    assert ledger.problems([ok], BANNED) == []

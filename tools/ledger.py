@@ -7,7 +7,7 @@ stories/ledger.yml is a YAML list of entries (every key required):
   id        "<NNN>-<slug>" for a coded story, "idea-<slug>" for an idea that never got a video
   claim     one sentence, the strange true fact
   topics    1-8 lower-case words
-  sources   >= 2 distinct http(s) URLs on different domains
+  sources   >= 2 distinct http(s) URLs on different registrable domains (en. and de.wikipedia.org are one)
   scores    {strange, obscurity, people, visual, provable}, integers 1-5 (a coded story needs strange >= 4,
             obscurity >= 4, people >= 3)
   status    idea | coded | dropped
@@ -21,6 +21,7 @@ entry, or is worded very like the entry's claim.
 The matching code (_STOP, _stem, words, similarity) is the FactPop algorithm, copied verbatim.
 """
 import argparse
+import ipaddress
 import re
 import sys
 from datetime import date
@@ -99,19 +100,28 @@ def banned_hit(claim, banned):
     return None
 
 
+def parse_list(text, name):
+    """the YAML list in `text` (a file called `name`); empty counts as []; raises ValueError for invalid YAML or a non-list"""
+    try:
+        data = yaml.safe_load(text)
+    except yaml.YAMLError as e:
+        raise ValueError(f"{name} is not valid YAML: {' '.join(str(e).split())}") from e
+    if data is None:
+        return []
+    if not isinstance(data, list):
+        raise ValueError(f"{name} must be a YAML list")
+    return data
+
+
 def _load_list(path):
     path = Path(path)
     if not path.exists():
         return []
     try:
-        data = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError) as e:
-        raise ValueError(f"{path.name} is not valid YAML: {' '.join(str(e).split())}") from e
-    if data is None:
-        return []
-    if not isinstance(data, list):
-        raise ValueError(f"{path.name} must be a YAML list")
-    return data
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as e:
+        raise ValueError(f"{path.name} is not readable: {' '.join(str(e).split())}") from e
+    return parse_list(text, path.name)
 
 
 def load(root=ROOT):
@@ -134,9 +144,33 @@ def _iso(x):
     return True
 
 
+# second-level labels that, under a 2-letter country code, belong to the suffix (bbc.co.uk, abc.net.au, uni.ac.nz)
+_SECOND_LEVEL = frozenset(("co", "com", "org", "net", "gov", "ac", "edu"))
+
+
+def registrable_domain(host):
+    """the domain that identifies a source: the last two labels of `host` (en.wikipedia.org -> wikipedia.org), or the
+    last three under a country-code suffix such as co.uk or com.au (www.bbc.co.uk -> bbc.co.uk); an IP address stays whole"""
+    host = host.lower().strip(".")
+    try:
+        ipaddress.ip_address(host)
+        return host
+    except ValueError:
+        pass
+    labels = host.split(".")
+    if len(labels) >= 3 and labels[-2] in _SECOND_LEVEL and len(labels[-1]) == 2:
+        return ".".join(labels[-3:])
+    return ".".join(labels[-2:])
+
+
 def _domain(url):
-    p = urlparse(url)
-    return (p.hostname or "").lower().removeprefix("www.") if p.scheme in ("http", "https") else ""
+    """the registrable domain of an http(s) URL, or "" when it is not one (or cannot be parsed)"""
+    try:
+        p = urlparse(url)
+        host = p.hostname or ""
+    except ValueError:
+        return ""
+    return registrable_domain(host) if p.scheme in ("http", "https") and host else ""
 
 
 def _int(x):
@@ -146,9 +180,9 @@ def _int(x):
 def _entry_problems(e):
     if not isinstance(e, dict):
         return ["ledger entry must be a mapping"]
-    label = f"ledger '{e['id']}'" if isinstance(e.get("id"), str) and e["id"].strip() else "ledger entry"
+    label = f"ledger {e['id']!r}" if isinstance(e.get("id"), str) and e["id"].strip() else "ledger entry"
     errs = [f"{label}: missing key '{k}'" for k in KEYS if k not in e]
-    errs += [f"{label}: unknown key '{k}'" for k in e if k not in KEYS]
+    errs += [f"{label}: unknown key {k!r}" for k in e if k not in KEYS]
     if "id" in e and not (isinstance(e["id"], str) and ID_RE.fullmatch(e["id"])):
         errs.append(f"{label}: id must be '<NNN>-<slug>' or 'idea-<slug>'")
     if "claim" in e and not (isinstance(e["claim"], str) and e["claim"].strip()):
@@ -164,7 +198,7 @@ def _entry_problems(e):
         else:
             doms = [_domain(u) for u in s]
             if not all(doms):
-                errs.append(f"{label}: every source must be an http(s) URL")
+                errs.append(f"{label}: sources must be http(s) URLs")
             elif len(set(s)) < 2 or len(set(doms)) < 2:
                 errs.append(f"{label}: 'sources' needs at least 2 distinct URLs on different domains")
     sc = e.get("scores")
@@ -206,7 +240,7 @@ def _banned_problems(i, b):
         errs.append(f"{label}: needs a 'claim'")
     if not (isinstance(kw, list) and kw and all(isinstance(k, str) and words(k) for k in kw)):
         errs.append(f"{label}: 'keywords' must be a non-empty list of words")
-    extra = sorted(map(str, set(b) - {"claim", "keywords"}))
+    extra = sorted(map(repr, set(b) - {"claim", "keywords"}))
     if extra:
         errs.append(f"{label}: unknown key(s) {', '.join(extra)}")
     return errs
@@ -218,10 +252,10 @@ def problems(entries, banned):
     for e in entries:
         errs += _entry_problems(e)
     ids = [e["id"] for e in entries if isinstance(e, dict) and isinstance(e.get("id"), str)]
-    errs += [f"duplicate ledger id '{i}'" for i in dict.fromkeys(ids) if ids.count(i) > 1]
+    errs += [f"duplicate ledger id {i!r}" for i in dict.fromkeys(ids) if ids.count(i) > 1]
     vids = [e["video"] for e in entries if isinstance(e, dict) and e.get("status") == "coded"
             and isinstance(e.get("video"), str)]
-    errs += [f"duplicate ledger video '{v}'" for v in dict.fromkeys(vids) if vids.count(v) > 1]
+    errs += [f"duplicate ledger video {v!r}" for v in dict.fromkeys(vids) if vids.count(v) > 1]
     for i, b in enumerate(banned):
         errs += _banned_problems(i, b)
     return errs
@@ -233,19 +267,88 @@ def check(claim, topics, entries, banned):
     errs = []
     hit = banned_hit(claim, banned)
     if hit:
-        errs.append(f"banned: {hit}")
+        errs.append(f"banned: {hit!r}")
     mine = {str(t).strip().lower() for t in topics if str(t).strip()}
     for e in entries:
         if not isinstance(e, dict):
             continue
         eid = e.get("id")
         if similarity(claim, e.get("claim", "")) >= SIMILAR:
-            errs.append(f"same story as {eid}: {e.get('claim')}")
+            errs.append(f"same story as {eid!r}: {e.get('claim')!r}")
         theirs = e.get("topics") if isinstance(e.get("topics"), list) else []
         shared = sorted(mine & {str(t).strip().lower() for t in theirs})
         if len(shared) >= SHARED_TOPICS:
-            errs.append(f"shares {len(shared)} topics ({', '.join(shared)}) with {eid}")
+            errs.append(f"shares {len(shared)} topics ({', '.join(map(repr, shared))}) with {eid!r}")
     return errs
+
+
+_DROP_FIELDS = {"status", "reason", "video"}   # what may change when an entry is dropped
+_CODE_FIELDS = {"status", "video"}             # what may change when an idea gets its video
+
+
+def _transition_problem(b, n):
+    """why the ledger entry `n` may not replace the base entry `b` (None when it may: unchanged, idea -> coded with the
+    video set, or idea/coded -> dropped with a reason and the video cleared)"""
+    if b == n:
+        return None
+    bs, ns = b.get("status"), n.get("status")
+    changed = {k for k in set(b) | set(n) if b.get(k) != n.get(k)}
+    if (bs, ns) == ("idea", "coded"):
+        extra = changed - _CODE_FIELDS
+    elif bs in ("idea", "coded") and ns == "dropped":
+        extra = changed - _DROP_FIELDS
+        if not extra and not (isinstance(n.get("reason"), str) and n["reason"].strip()):
+            return "was dropped without a reason"
+        if not extra and n.get("video") != "":
+            return "was dropped but its video is not cleared to \"\""
+    elif bs != ns:
+        return f"status {bs!r} -> {ns!r} is not allowed (only idea -> coded, idea -> dropped, coded -> dropped)"
+    else:
+        extra = changed
+    if extra:
+        return f"was edited (fields: {', '.join(sorted(map(repr, extra)))}); existing entries are append-only"
+    return None
+
+
+def change_problems(base_entries, base_banned, new_entries, new_banned):
+    """the story rules a branch's change to the story files must keep, against main's copies:
+    - ledger entries are append-only: none deleted or edited, except idea -> coded (video set), idea -> dropped and
+      coded -> dropped (reason given, video cleared);
+    - banned entries are never removed or edited (the list may only gain entries);
+    - every new entry, and every entry that became coded, passes check() against the other entries of the merged
+      ledger and the merged banned list.
+    Ids and claims are echoed with repr(), so they cannot inject lines into the output."""
+    errs = []
+    new_by_id = {}
+    for e in new_entries:
+        if isinstance(e, dict) and isinstance(e.get("id"), str):
+            new_by_id.setdefault(e["id"], e)
+    base_by_id = {}
+    for b in base_entries:
+        if isinstance(b, dict) and isinstance(b.get("id"), str):
+            base_by_id.setdefault(b["id"], b)
+            n = new_by_id.get(b["id"])
+            if n is None:
+                errs.append(f"ledger entry {b['id']!r} was deleted; existing entries are append-only")
+            else:
+                why = _transition_problem(b, n)
+                if why:
+                    errs.append(f"ledger entry {b['id']!r} {why}")
+    for b in base_banned:
+        if b not in new_banned:
+            label = b.get("claim") if isinstance(b, dict) else b
+            errs.append(f"banned entry {label!r} was removed or edited; the banned list may only gain entries")
+    banned = list(base_banned) + [b for b in new_banned if b not in base_banned]
+    for i, e in enumerate(new_entries):
+        if not isinstance(e, dict) or not isinstance(e.get("claim"), str):
+            continue    # problems() reports it
+        was = base_by_id.get(e.get("id"))
+        if was is not None and not (e.get("status") == "coded" and was.get("status") != "coded"):
+            continue    # an old entry that did not just become coded
+        topics = e.get("topics") if isinstance(e.get("topics"), list) else []
+        others = [o for j, o in enumerate(new_entries) if j != i]
+        errs += [f"ledger entry {e.get('id')!r}: {r}" for r in check(e["claim"], topics, others, banned)]
+    return list(dict.fromkeys(errs))
 
 
 def video_problems(vid, entries):
@@ -254,8 +357,8 @@ def video_problems(vid, entries):
     if n == 1:
         return []
     if n == 0:
-        return [f"no coded entry in stories/ledger.yml for video {vid}"]
-    return [f"{n} coded entries in stories/ledger.yml for video {vid} (need exactly one)"]
+        return [f"no coded entry in stories/ledger.yml for video {vid!r}"]
+    return [f"{n} coded entries in stories/ledger.yml for video {vid!r} (need exactly one)"]
 
 
 def main(argv):

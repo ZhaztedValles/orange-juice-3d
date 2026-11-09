@@ -135,6 +135,15 @@ def test_cli_branch_name_exit_codes():
     assert subprocess.run(cmd + ["claude/oj-$(id)"], capture_output=True).returncode == 1
 
 
+def _story(vid, claim, topics):
+    """one coded ledger entry (YAML text) for videos/<vid>"""
+    lines = [f"- id: {vid}", f'  claim: "{claim}"', f"  topics: [{topics}]",
+             "  sources: [https://example.org/a, https://example.com/b]",
+             "  scores: {strange: 4, obscurity: 4, people: 3, visual: 4, provable: 4}",
+             "  status: coded", '  reason: ""', f"  video: {vid}", '  date: "2026-11-10"']
+    return "\n".join(lines) + "\n"
+
+
 def _git(cwd, *args):
     return subprocess.run(["git", *args], cwd=cwd, check=True, capture_output=True, text=True).stdout
 
@@ -154,10 +163,16 @@ def test_cli_on_a_repo(tmp_path):
     (repo / "state" / "render").mkdir(parents=True)
     (repo / "state" / "render" / "001-queued-one.json").write_text('{"status": "queued"}')
     (repo / "state" / "render" / "002-held-one.json").write_text('{"status": "held"}')
+    (repo / "stories").mkdir()
+    (repo / "stories" / "ledger.yml").write_text(_story("002-held-one", "A sailor in Oslo painted a whale",
+                                                         "oslo, whale"), encoding="utf-8")
     _git(repo, "add", "-A")
     _git(repo, "commit", "-q", "-m", "main")
     _git(repo, "checkout", "-q", "-b", "claude/oj-x")
     shutil.copytree(ROOT / "videos" / "000-bridge", repo / "videos" / "003-new-one")
+    (repo / "stories" / "ledger.yml").write_text(
+        _story("002-held-one", "A sailor in Oslo painted a whale", "oslo, whale")
+        + _story("003-new-one", "A baker in Lisbon invented a clock", "lisbon, clock"), encoding="utf-8")
     with open(repo / "videos" / "002-held-one" / "SCRIPT.md", "a", encoding="utf-8") as f:
         f.write("\n")
     _git(repo, "add", "-A")
@@ -500,11 +515,6 @@ def test_new_video_with_its_ledger_entry_is_accepted(tmp_path):
     assert r.stdout.startswith("accepted")
 
 
-def test_template_video_needs_no_ledger_entry(tmp_path):
-    repo, cli = _ledger_repo(tmp_path, template=True)
-    r = subprocess.run(cli, cwd=repo, capture_output=True, text=True)
-    assert r.returncode == 0, r.stdout + r.stderr
-
 
 def test_malformed_ledger_is_rejected(tmp_path):
     for text in ("- [unclosed", "just: a mapping", LEDGER_ENTRY.replace("sources: [https://example.org/a, "
@@ -518,3 +528,126 @@ def test_ledger_entry_for_another_video_does_not_count(tmp_path):
     repo, cli = _ledger_repo(tmp_path, LEDGER_ENTRY.replace("video: 001-new-one", "video: 002-other"))
     r = subprocess.run(cli, cwd=repo, capture_output=True, text=True)
     assert r.returncode == 1 and "001-new-one" in r.stdout
+
+
+# --- the story rules are enforced against main's copies, not just the schema ---
+
+OLD_ENTRY = """- id: idea-old
+  claim: "A sailor in Oslo painted a whale"
+  topics: [oslo, whale]
+  sources: [https://example.org/a, https://example.com/b]
+  scores: {strange: 4, obscurity: 4, people: 3, visual: 4, provable: 4}
+  status: idea
+  reason: ""
+  video: ""
+  date: "2026-11-01"
+"""
+OLD_BANNED = '- {claim: "A cat painted a ship", keywords: [cat, ship]}\n'
+
+
+def _story_repo(tmp_path, base_ledger, base_banned, branch_ledger, branch_banned=None):
+    """a scratch repo whose main has the template plus the given story files and whose branch adds the real video
+    videos/001-new-one and replaces the story files. Returns (repo, cli)."""
+    import shutil
+    repo = tmp_path / "r"
+    repo.mkdir(parents=True)
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "t")
+    shutil.copytree(ROOT / "videos" / "000-bridge", repo / "videos" / "000-bridge")
+    (repo / "stories").mkdir()
+    (repo / "stories" / "ledger.yml").write_text(base_ledger, encoding="utf-8")
+    (repo / "stories" / "banned.yml").write_text(base_banned, encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "main")
+    _git(repo, "checkout", "-q", "-b", "claude/oj-x")
+    shutil.copytree(ROOT / "videos" / "000-bridge", repo / "videos" / "001-new-one")
+    (repo / "videos" / "001-new-one" / "meta.yml").write_text(
+        'title: "Lisbon clock"\ndescription: "A story."\ntags: []\n'
+        'sources: [https://example.org/a, https://example.com/b]\n', encoding="utf-8")
+    (repo / "stories" / "ledger.yml").write_text(branch_ledger, encoding="utf-8")
+    if branch_banned is not None:
+        (repo / "stories" / "banned.yml").write_text(branch_banned, encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "branch")
+    return repo, [sys.executable, str(ROOT / "tools" / "accept_check.py"), "main", "HEAD"]
+
+
+def _run(repo, cli):
+    return subprocess.run(cli, cwd=repo, capture_output=True, text=True)
+
+
+def test_appending_to_the_ledger_is_accepted(tmp_path):
+    repo, cli = _story_repo(tmp_path, OLD_ENTRY, OLD_BANNED, OLD_ENTRY + LEDGER_ENTRY)
+    r = _run(repo, cli)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_editing_or_deleting_an_old_ledger_entry_is_rejected(tmp_path):
+    repo, cli = _story_repo(tmp_path / "a", OLD_ENTRY, OLD_BANNED,
+                            OLD_ENTRY.replace("painted a whale", "painted a dolphin") + LEDGER_ENTRY)
+    r = _run(repo, cli)
+    assert r.returncode == 1 and "stories:" in r.stdout and "idea-old" in r.stdout and "edited" in r.stdout, r.stdout
+    repo, cli = _story_repo(tmp_path / "b", OLD_ENTRY, OLD_BANNED, LEDGER_ENTRY)
+    r = _run(repo, cli)
+    assert r.returncode == 1 and "deleted" in r.stdout, r.stdout
+
+
+def test_trimming_the_banned_list_is_rejected(tmp_path):
+    repo, cli = _story_repo(tmp_path, OLD_ENTRY, OLD_BANNED, OLD_ENTRY + LEDGER_ENTRY, branch_banned="[]\n")
+    r = _run(repo, cli)
+    assert r.returncode == 1 and "stories:" in r.stdout and "A cat painted a ship" in r.stdout, r.stdout
+
+
+def test_new_entry_repeating_main_or_banned_is_rejected(tmp_path):
+    repeat = LEDGER_ENTRY.replace("A baker in Lisbon invented a clock", "A sailor in Oslo painted a whale")
+    repo, cli = _story_repo(tmp_path / "a", OLD_ENTRY, OLD_BANNED, OLD_ENTRY + repeat)
+    r = _run(repo, cli)
+    assert r.returncode == 1 and "same story as 'idea-old'" in r.stdout, r.stdout
+    banned = LEDGER_ENTRY.replace("A baker in Lisbon invented a clock", "A cat painted a ship")
+    repo, cli = _story_repo(tmp_path / "b", OLD_ENTRY, OLD_BANNED, OLD_ENTRY + banned)
+    r = _run(repo, cli)
+    assert r.returncode == 1 and "banned:" in r.stdout, r.stdout
+
+
+def test_idea_becoming_coded_is_accepted_and_checked(tmp_path):
+    coded = OLD_ENTRY.replace("status: idea", "status: coded").replace('video: ""', "video: 001-new-one")
+    repo, cli = _story_repo(tmp_path / "a", OLD_ENTRY, OLD_BANNED, coded)
+    r = _run(repo, cli)
+    assert r.returncode == 0, r.stdout + r.stderr
+    # coded back to idea is not a transition the writer may make
+    repo, cli = _story_repo(tmp_path / "b", coded, OLD_BANNED, OLD_ENTRY)
+    r = _run(repo, cli)
+    assert r.returncode == 1 and "'coded' -> 'idea'" in r.stdout, r.stdout
+
+
+def test_unparseable_source_url_is_a_rejection_not_a_traceback(tmp_path):
+    bad = LEDGER_ENTRY.replace("https://example.com/b", '"http://[bad"')
+    repo, cli = _story_repo(tmp_path, OLD_ENTRY, OLD_BANNED, OLD_ENTRY + bad)
+    r = _run(repo, cli)
+    assert r.returncode == 1 and "http(s) URLs" in r.stdout and "Traceback" not in r.stderr, r.stdout + r.stderr
+
+
+def test_unexpected_failure_in_the_story_check_is_a_rejection(tmp_path):
+    class Boom:
+        @staticmethod
+        def load(repo):
+            raise RuntimeError("boom\n::error::x")
+    out = accept_check.story_problems("main", tmp_path, [("M", "stories/ledger.yml")], [], Boom)
+    assert len(out) == 1 and out[0].startswith("stories: cannot check the story files (") and "\n" not in out[0]
+
+
+def test_unreadable_base_story_file_is_a_rejection(tmp_path):
+    repo, cli = _story_repo(tmp_path, "- [unclosed\n", OLD_BANNED, OLD_ENTRY + LEDGER_ENTRY)
+    r = _run(repo, cli)
+    assert r.returncode == 1 and "stories:" in r.stdout and "Traceback" not in r.stderr, r.stdout + r.stderr
+
+
+def test_only_the_bridge_is_exempt_from_the_ledger_not_any_template(tmp_path):
+    """a writer's own folder marked `template: true` still needs its ledger entry"""
+    repo, cli = _ledger_repo(tmp_path, template=True)
+    # _ledger_repo(template=True) copies the template, so videos/001-new-one has `template: true` and no entry
+    r = _run(repo, cli)
+    assert r.returncode == 1 and "001-new-one" in r.stdout and "ledger" in r.stdout, r.stdout + r.stderr
+    # while the real template id stays exempt
+    assert accept_check.TEMPLATE == "000-bridge"
