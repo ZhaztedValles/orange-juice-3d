@@ -619,7 +619,7 @@ def test_youtube_client_names_missing_secrets(monkeypatch):
 def test_config_has_the_launch_values():
     cfg = yaml.safe_load((ROOT / "config.yml").read_text(encoding="utf-8"))
     assert cfg["paused"] is False and cfg["timezone"] == "Asia/Manila" and cfg["slots"] == ["19:00"]
-    assert cfg["slot_window_minutes"] == 90 and cfg["require_approval"] is True
+    assert cfg["slot_window_minutes"] == 90 and cfg["require_approval"] is False  # owner: no review (2026-11-09)
     y = cfg["youtube"]
     assert y["enabled"] is True and y["privacy"] == "public" and y["made_for_kids"] is False and y["language"] == "en"
     assert y["category_id"] == "27" and y["contains_synthetic_media"] is False
