@@ -8,6 +8,14 @@ Usage:
       --videos-out writes "<id> <FRAMES>" per touched video folder, for the smoke stills.
   python tools/accept_check.py --branch REF
       exit 0 when REF is a writer branch name (claude/oj-<[A-Za-z0-9._-]+>), 1 otherwise.
+  python tools/accept_check.py --find [--only BRANCH] [--tripwire-out FILE]
+      lists origin's writer branches (git ls-remote), fetches each, and prints JSON
+      {"branch", "sha", "slug", "tripped": [{"branch", "sha", "paths"}]}: the oldest (commit date) branch to accept,
+      "" when none. A branch whose diff vs HEAD (main) touches .github/ is never picked (tripped: the workflow opens an
+      issue; --tripwire-out writes its body); a branch that failed at its current sha (state/accept/<slug>.json) is
+      skipped until it is pushed again, unless --only names it (a manual re-run).
+  python tools/accept_check.py --record-failure BRANCH SHA
+      writes state/accept/<slug>.json, so --find skips BRANCH until its sha changes.
 
 The CODE comes from the copy of this file that is run (CODE_ROOT: the workflow runs main's trusted copy from a git
 worktree, never the branch's); the DATA (the diff, the folders, the story files) from the repository in the current
@@ -34,10 +42,70 @@ VIDEO_DIR_RE = re.compile(r"videos/([^/]+)/", re.ASCII)
 STORIES_RE = re.compile(r"stories/(?:ledger|banned)\.yml", re.ASCII)
 BRANCH_RE = re.compile(r"claude/oj-[A-Za-z0-9._-]+", re.ASCII)
 STATUSES = ("A", "M", "D")
+WORKFLOW_RE = re.compile(r"\.github(?:/|$)", re.ASCII | re.IGNORECASE)
 
 
 def branch_ok(ref):
     return bool(BRANCH_RE.fullmatch(ref))
+
+
+def parse_name_status_z(text):
+    """[(status, path)] from `git diff -z --name-status --no-renames` (status NUL path NUL ..., paths unquoted)"""
+    parts = text.split("\0")
+    if parts and parts[-1] == "":
+        parts.pop()
+    if len(parts) % 2:
+        raise ValueError("malformed git diff -z --name-status output")
+    return list(zip(parts[0::2], parts[1::2]))
+
+
+def workflow_paths(changed):
+    """the paths under .github/ (any status, any letter case): such a branch is never processed"""
+    return [p for _, p in changed if WORKFLOW_RE.match(p)]
+
+
+def slug(branch):
+    if not branch_ok(branch):
+        raise ValueError(f"not a writer branch name: {branch!r}")
+    return branch[len("claude/"):]
+
+
+def pick_branch(branches, failed, tripped, only=None):
+    """the oldest ({name, sha, date}) writer branch to accept: not tripped, not failed at its current sha (unless it is
+    `only`, a manual re-run), and `only` when given; None when there is none"""
+    for b in sorted(branches, key=lambda b: (b["date"], b["name"])):
+        name = b["name"]
+        if not branch_ok(name) or name in tripped or (only is not None and name != only):
+            continue
+        if only is None and failed.get(slug(name)) == b["sha"]:
+            continue
+        return b
+    return None
+
+
+def tripwire_body(tripped):
+    lines = ["A writer branch changed files under `.github/`. Accept never processes such a branch; check it by hand, "
+             "then delete it (and review recent workflow runs).", ""]
+    for t in tripped:
+        lines += [f"- `{t['branch']}` at {t['sha']}:"] + [f"  - `{p}`" for p in t["paths"]]
+    return "\n".join(lines) + "\n"
+
+
+def record_failure(state_dir, branch, sha):
+    p = Path(state_dir) / "accept" / f"{slug(branch)}.json"
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"branch": branch, "sha": sha}, indent=1) + "\n", encoding="utf-8")
+
+
+def load_failures(state_dir):
+    """{slug: sha} of the recorded failures"""
+    out = {}
+    for p in sorted((Path(state_dir) / "accept").glob("*.json")):
+        try:
+            out[p.stem] = json.loads(p.read_text(encoding="utf-8")).get("sha")
+        except (OSError, ValueError, AttributeError):
+            pass
+    return out
 
 
 def held_ids(render_states, posted):
@@ -97,8 +165,28 @@ def _repo():
 
 
 def changes(base, head, repo):
-    out = _git("diff", "--name-status", "--no-renames", f"{base}...{head}", repo=repo)
-    return [tuple(ln.split("\t", 1)) for ln in out.splitlines() if ln.strip()]
+    return parse_name_status_z(_git("diff", "-z", "--name-status", "--no-renames", f"{base}...{head}", repo=repo))
+
+
+def find(repo, only=None):
+    """{"branch", "sha", "slug", "tripped"} (see the module doc); fetches every writer branch from origin"""
+    out = _git("ls-remote", "--heads", "origin", repo=repo)
+    branches, tripped = [], []
+    for ln in out.splitlines():
+        sha, _, ref = ln.partition("\t")
+        name = ref[len("refs/heads/"):] if ref.startswith("refs/heads/") else ""
+        if not branch_ok(name) or not re.fullmatch(r"[0-9a-f]{40}", sha):
+            continue
+        _git("fetch", "-q", "--no-tags", "origin", f"+refs/heads/{name}:refs/remotes/origin/{name}", repo=repo)
+        sha = _git("rev-parse", f"refs/remotes/origin/{name}^{{commit}}", repo=repo).strip()
+        paths = workflow_paths(changes("HEAD", sha, repo))
+        if paths:
+            tripped.append({"branch": name, "sha": sha, "paths": paths})
+        date = int(_git("log", "-1", "--format=%ct", sha, repo=repo).strip())
+        branches.append({"name": name, "sha": sha, "date": date})
+    b = pick_branch(branches, load_failures(repo / "state"), {t["branch"] for t in tripped}, only=only)
+    return {"branch": b["name"] if b else "", "sha": b["sha"] if b else "", "slug": slug(b["name"]) if b else "",
+            "tripped": tripped}
 
 
 def _ls(base, path, repo, dirs):
@@ -131,6 +219,20 @@ def main(argv):
         ok = branch_ok(argv[1])
         print("ok" if ok else f"not a writer branch name: {argv[1]!r} (want claude/oj-[A-Za-z0-9._-]+)")
         return 0 if ok else 1
+    if argv[:1] == ["--record-failure"] and len(argv) == 3:
+        record_failure(_repo() / "state", argv[1], argv[2])
+        return 0
+    if argv[:1] == ["--find"]:
+        opts = dict(zip(argv[1::2], argv[2::2]))
+        if len(argv) % 2 == 0 or set(opts) - {"--only", "--tripwire-out"}:
+            print(__doc__, file=sys.stderr)
+            return 2
+        res = find(_repo(), only=opts.get("--only") or None)
+        if opts.get("--tripwire-out"):
+            Path(opts["--tripwire-out"]).write_text(tripwire_body(res["tripped"]) if res["tripped"] else "",
+                                                    encoding="utf-8")
+        print(json.dumps(res))
+        return 0
     paths_only = "--paths-only" in argv
     argv = [a for a in argv if a != "--paths-only"]
     videos_out = None

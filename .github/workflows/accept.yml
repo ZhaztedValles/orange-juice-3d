@@ -1,5 +1,11 @@
-# Accept: the gate for the nightly writer's branches (claude/oj-<date>). Ported from FactPop's accept-routine.yml.
+# Accept: the gate for the nightly writer's branches (claude/oj-<date>). Ported from FactPop's accept-routine.yml, but
+# run from main's copy of this file (schedule / workflow_dispatch), never from a pushed branch's.
 #
+# find (contents: read, issues: write) - lists origin's claude/oj-* branches (git ls-remote), fetches them and picks
+#   the oldest by commit date (one per run; the next run takes the next). Tripwire: a branch whose diff vs main touches
+#   .github/ is never processed; an issue "Orange Juice: writer branch touched workflows" names it and its paths.
+#   A branch that failed at its current sha (state/accept/<slug>.json) is skipped until it is pushed again, or until
+#   it is named in the `branch` input of a manual run.
 # check (contents: read) - main's trusted accept_check (a git worktree of main, never the branch's copy) on the branch's
 #   diff, `git merge --no-commit --no-ff` into main in the workspace, `npm run gen`, the trusted check again on the
 #   merged tree (path rules + video_check of every touched folder), then the registry check, tsc, pytest, vitest and a
@@ -7,24 +13,32 @@
 # merge (contents: write, actions: write) - a fresh checkout of main: main may have moved since check only in state/
 #   (render state commits); the trusted check runs again on the actual merge (Python only), the registry is regenerated
 #   with main's scripts/gen-registry.mjs, then commit "Accept <branch>", push main (3 tries), dispatch render.yml, and
-#   last delete the branch (force-with-lease on the sha that was checked). On any failure the branch is kept and the
-#   job summary lists the problems.
+#   last delete the branch (force-with-lease on the sha that was checked).
+# record-failure (contents: write) - check failed, or merge failed before main was pushed: the branch is kept and
+#   state/accept/<slug>.json records the failed sha. Job summaries list the problems.
 #
 # Security (public repo): the branch is writer-authored. Its TSX runs only in check, in vitest (which imports the
 # registry) and the smoke stills - both after every trusted check and after pytest, in a job with contents: read, no
 # secrets, no persisted git credentials, caches restored but never saved. merge holds the write token and runs no
 # writer code: Python static checks, main's gen-registry (it reads folder names only) and git. The push credential is
-# set on the remote only in the push step and removed after it.
+# set on the remote only in the push / delete steps and removed after them.
 #
-# Residual risk, accepted: GitHub runs the copy of THIS file that is on the pushed branch, so a branch that edits it
-# could skip the checks. Only collaborators can push claude/oj-* (pushes from forks do not run here), the writer is our
-# own agent, and main's checker rejects any change outside videos/<NNN-slug>/ and stories/, so an honest run cannot
-# change this file.
+# Residual risk, accepted: GitHub runs workflow files from ANY pushed branch, so a writer branch that adds or edits a
+# file under .github/workflows/ gets that workflow run on push, with a GITHUB_TOKEN (up to the repository's default
+# workflow permissions) - before Accept ever looks at it. Mitigations: Accept itself runs only from main's copy, the
+# tripwire above alerts on any such branch and never processes it, and the writer's rules forbid .github/. The full fix
+# is a writer credential without the `workflows` permission (GitHub then refuses the push of any workflow change).
 name: accept
 
 on:
-  push:
-    branches: ["claude/oj-*"]
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Writer branch to accept (claude/oj-...); empty = the oldest one. Names a failed branch to retry it."
+        default: ""
+        required: false
 
 concurrency:
   group: oj-accept
@@ -37,8 +51,73 @@ defaults:
     shell: bash          # bash -eo pipefail, so `cmd | tee` fails when cmd fails
 
 jobs:
+  find:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write       # the workflow tripwire issue
+    outputs:
+      branch: ${{ steps.find.outputs.branch }}
+      sha: ${{ steps.find.outputs.sha }}
+      slug: ${{ steps.find.outputs.slug }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Find the oldest writer branch (main's accept_check; nothing from the branches runs)
+        id: find
+        env:
+          ONLY: ${{ inputs.branch }}
+        run: |
+          only=()
+          if [ -n "$ONLY" ]; then
+            if [[ ! "$ONLY" =~ ^claude/oj-[A-Za-z0-9._-]+$ ]]; then echo "::error::not a writer branch name"; exit 1; fi
+            only=(--only "$ONLY")
+          fi
+          res=$(python3 tools/accept_check.py --find "${only[@]}" --tripwire-out "$RUNNER_TEMP/tripwire.md")
+          echo "$res"
+          branch=$(jq -r '.branch' <<< "$res")
+          sha=$(jq -r '.sha' <<< "$res")
+          slug=$(jq -r '.slug' <<< "$res")
+          if [ -n "$branch" ]; then
+            if [[ ! "$branch" =~ ^claude/oj-[A-Za-z0-9._-]+$ || ! "$sha" =~ ^[0-9a-f]{40}$ || "claude/$slug" != "$branch" ]]; then
+              echo "::error::unexpected find result"; exit 1
+            fi
+            echo "Accepting $branch at $sha" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No writer branch to accept" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          {
+            echo "branch=$branch"
+            echo "sha=$sha"
+            echo "slug=$slug"
+            echo "tripped=$(jq '.tripped | length' <<< "$res")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Tripwire - a writer branch touched .github/
+        if: steps.find.outputs.tripped != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          title="Orange Juice: writer branch touched workflows"
+          echo "::error::$title (not processed): see the issue"
+          { echo "### $title"; cat "$RUNNER_TEMP/tripwire.md"; } >> "$GITHUB_STEP_SUMMARY"
+          num=$(gh issue list --state open --search "\"$title\" in:title" --json number,title \
+                  --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)
+          if [ -z "$num" ]; then
+            gh issue create --title "$title" --body-file "$RUNNER_TEMP/tripwire.md"
+          elif [ "$(gh issue view "$num" --json body --jq .body)" != "$(cat "$RUNNER_TEMP/tripwire.md")" ]; then
+            gh issue edit "$num" --body-file "$RUNNER_TEMP/tripwire.md"
+          fi
+
   check:
-    if: github.event.deleted != true
+    needs: find
+    if: needs.find.outputs.branch != ''
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -46,31 +125,25 @@ jobs:
     outputs:
       main_sha: ${{ steps.base.outputs.sha }}
     env:
-      REF: ${{ github.ref_name }}
-      HEAD_SHA: ${{ github.sha }}
+      BRANCH: ${{ needs.find.outputs.branch }}
+      HEAD_SHA: ${{ needs.find.outputs.sha }}
       TMPDIR: ${{ github.workspace }}/../remotion-tmp
     steps:
-      - name: Branch name
-        id: ref
-        run: |
-          if [[ ! "$REF" =~ ^claude/oj-[A-Za-z0-9._-]+$ ]]; then
-            echo "::error::not a writer branch name (want claude/oj-[A-Za-z0-9._-]+)"; exit 1
-          fi
-          echo "slug=${REF#claude/}" >> "$GITHUB_OUTPUT"
-
-      # The job starts from main; the branch (HEAD_SHA) is merged into it further down.
+      # The job starts from main; the branch (HEAD_SHA, its sha when find ran) is merged into it further down.
       - uses: actions/checkout@v4
         with:
           ref: main
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Trusted copy of main (the checker runs from here, never from the branch)
+      - name: Trusted copy of main (the checker runs from here, never from the branch); fetch the branch
         id: base
         run: |
+          if [[ ! "$BRANCH" =~ ^claude/oj-[A-Za-z0-9._-]+$ || ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then exit 1; fi
           sha=$(git rev-parse HEAD)
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           git worktree add -q --detach "$RUNNER_TEMP/trusted" "$sha"
+          git fetch -q --no-tags origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || true
           git cat-file -e "$HEAD_SHA^{commit}" 2>/dev/null || git fetch -q --no-tags origin "$HEAD_SHA"
           git config user.name "orange-juice-autopilot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -126,18 +199,19 @@ jobs:
           python "$RUNNER_TEMP/trusted/tools/accept_check.py" --videos-out "$RUNNER_TEMP/videos.txt" "$(git rev-parse HEAD)" "$HEAD_SHA" \
             | tee -a "$RUNNER_TEMP/problems.txt"
 
+      # From here on, the summary gets one pass/fail line per step; the output stays in the step log.
       - name: Registry up to date, TypeScript compiles
         run: |
-          npm run gen -- --check 2>&1 | tee -a "$RUNNER_TEMP/problems.txt"
-          npx tsc --noEmit 2>&1 | tail -n 60 | tee -a "$RUNNER_TEMP/problems.txt"
+          npm run gen -- --check || { echo "registry out of date (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1; }
+          npx tsc --noEmit || { echo "tsc failed (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1; }
 
       # tests/ is main's (the branch cannot change it); pytest runs before anything executes the branch's TSX
       - name: pytest
-        run: python -m pytest -q tests 2>&1 | tail -n 60 | tee -a "$RUNNER_TEMP/problems.txt"
+        run: python -m pytest -q tests || { echo "pytest failed (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1; }
 
       # from here on the branch's video code runs (vitest imports the registry; the stills render it)
       - name: vitest
-        run: npx vitest run 2>&1 | tail -n 80 | tee -a "$RUNNER_TEMP/problems.txt"
+        run: npx vitest run || { echo "vitest failed (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1; }
 
       - name: Smoke stills
         id: stills
@@ -145,20 +219,19 @@ jobs:
           mkdir -p "$TMPDIR" smoke
           while read -r id frames; do
             if [[ ! "$id" =~ ^[0-9]{3}-[a-z0-9-]{3,50}$ || ! "$frames" =~ ^[0-9]+$ ]]; then
-              echo "bad videos.txt line: $id $frames" | tee -a "$RUNNER_TEMP/problems.txt"; exit 1
+              echo "bad videos.txt line" | tee -a "$RUNNER_TEMP/problems.txt"; exit 1
             fi
             echo "oj-$id: frame $((frames / 2)) of $frames"
             if ! npx remotion still src/index.ts "oj-$id" "smoke/$id.png" --frame=$((frames / 2)) --scale=0.5 \
-                 --gl=swangle --props='{"captions":false}' > still.log 2>&1; then
-              tail -n 40 still.log
-              echo "smoke still failed for $id" | tee -a "$RUNNER_TEMP/problems.txt"; exit 1
+                 --gl=swangle --props='{"captions":false}'; then
+              echo "smoke still failed for $id (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1
             fi
           done < "$RUNNER_TEMP/videos.txt"
 
       - uses: actions/upload-artifact@v4
         if: always() && steps.stills.outcome != 'skipped'
         with:
-          name: smoke-${{ steps.ref.outputs.slug }}
+          name: smoke-${{ needs.find.outputs.slug }}
           path: smoke/
           retention-days: 14
           if-no-files-found: ignore
@@ -170,33 +243,32 @@ jobs:
         run: |
           {
             if [ "$OUTCOME" = "success" ]; then
-              echo "### Accept check passed for \`$REF\`"
+              echo "### Accept check passed for \`$BRANCH\`"
             else
-              echo "### Accept check failed for \`$REF\` - the branch is kept"
+              echo "### Accept check failed for \`$BRANCH\` - the branch is kept"
             fi
             if [ -s "$RUNNER_TEMP/problems.txt" ]; then
               echo '```'
-              tail -n 150 "$RUNNER_TEMP/problems.txt"
+              tail -n 100 "$RUNNER_TEMP/problems.txt"
               echo '```'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   merge:
-    needs: check
+    needs: [find, check]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: write     # push main, delete the branch
       actions: write      # dispatch render.yml
+    outputs:
+      pushed: ${{ steps.push.outputs.pushed }}
     env:
-      REF: ${{ github.ref_name }}
-      HEAD_SHA: ${{ github.sha }}
+      BRANCH: ${{ needs.find.outputs.branch }}
+      SLUG: ${{ needs.find.outputs.slug }}
+      HEAD_SHA: ${{ needs.find.outputs.sha }}
       CHECKED_MAIN: ${{ needs.check.outputs.main_sha }}
     steps:
-      - name: Branch name
-        run: |
-          if [[ ! "$REF" =~ ^claude/oj-[A-Za-z0-9._-]+$ ]]; then echo "::error::not a writer branch name"; exit 1; fi
-
       - uses: actions/checkout@v4
         with:
           ref: main
@@ -206,18 +278,22 @@ jobs:
       - name: Main moved only in state/ since the check
         id: base
         run: |
+          if [[ ! "$BRANCH" =~ ^claude/oj-[A-Za-z0-9._-]+$ || "claude/$SLUG" != "$BRANCH" || ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            exit 1
+          fi
           sha=$(git rev-parse HEAD)
           if ! git merge-base --is-ancestor "$CHECKED_MAIN" "$sha"; then
             echo "main is not a descendant of the checked main ($CHECKED_MAIN)" | tee -a "$RUNNER_TEMP/problems.txt"; exit 1
           fi
           moved=$(git diff --name-only --no-renames "$CHECKED_MAIN" "$sha" -- . ':(exclude)state')
           if [ -n "$moved" ]; then
-            { echo "main changed outside state/ since the check; push the branch again to re-check:"; echo "$moved"; } \
+            { echo "main changed outside state/ since the check; the next run checks the branch again:"; echo "$moved"; } \
               | tee -a "$RUNNER_TEMP/problems.txt"
             exit 1
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           git worktree add -q --detach "$RUNNER_TEMP/trusted" "$sha"
+          git fetch -q --no-tags origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || true
           git cat-file -e "$HEAD_SHA^{commit}" 2>/dev/null || git fetch -q --no-tags origin "$HEAD_SHA"
           git config user.name "orange-juice-autopilot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -246,25 +322,23 @@ jobs:
           node-version: 22
 
       # main's scripts/gen-registry.mjs (the path rules keep scripts/ unchanged): it lists folder names, never imports them
-      - name: Regenerate the registry
+      - name: Regenerate the registry, drop this branch's failure record
         run: |
           node scripts/gen-registry.mjs
           node scripts/gen-registry.mjs --check
-          if git rev-parse -q --verify MERGE_HEAD > /dev/null; then git add src/videos.generated.ts; fi
+          git add src/videos.generated.ts
+          git rm -q --ignore-unmatch "state/accept/$SLUG.json"
 
-      - name: Commit, push main, start the render, retire the branch
+      - name: Commit and push main
+        id: push
         env:
           GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
           BASE: ${{ steps.base.outputs.sha }}
         run: |
           trap 'git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}"' EXIT
-          if git rev-parse -q --verify MERGE_HEAD > /dev/null; then
-            git commit -q -F - <<EOF
-          Accept $REF
-
-          Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-          EOF
+          trailer="Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+          if git rev-parse -q --verify MERGE_HEAD > /dev/null || ! git diff --cached --quiet; then
+            git commit -q -m "Accept $BRANCH" -m "$trailer"
           else
             echo "Already in main, nothing to commit."
           fi
@@ -277,32 +351,87 @@ jobs:
             # only render-state commits may slip in between; anything else needs a fresh check
             moved=$(git diff --name-only --no-renames "$BASE" origin/main -- . ':(exclude)state')
             if [ -n "$moved" ]; then
-              { echo "main changed outside state/ during the push; push the branch again to re-check:"; echo "$moved"; } \
+              { echo "main changed outside state/ during the push; the next run checks the branch again:"; echo "$moved"; } \
                 | tee -a "$RUNNER_TEMP/problems.txt"
               exit 1
             fi
-            git merge -q --no-edit origin/main
+            # the path rules again against the new main (its render state decides which folders are held)
+            python "$RUNNER_TEMP/trusted/tools/accept_check.py" --paths-only "$(git rev-parse origin/main)" "$HEAD_SHA" \
+              | tee -a "$RUNNER_TEMP/problems.txt"
+            git merge -q -m "Accept $BRANCH: merge main" -m "$trailer" origin/main
           done
-          gh workflow run render.yml --ref main
-          # Last, so a failed push or dispatch leaves the branch for a re-run (which finds main up to date and dispatches
-          # again); deleted only if it still points at the sha that was checked (a newer push keeps its own run)
-          git push -q --force-with-lease="refs/heads/$REF:$HEAD_SHA" origin ":refs/heads/$REF" \
-            || echo "::notice::$REF moved since this run started; kept for its own run"
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Start the render
+        id: dispatch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run render.yml --ref main
+
+      # Last, so a failed push or dispatch leaves the branch for the next run (which finds main up to date and
+      # dispatches again); deleted only if it still points at the sha that was checked (a newer push gets its own run)
+      - name: Retire the branch
+        id: delete
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          trap 'git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}"' EXIT
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}"
+          git push -q --force-with-lease="refs/heads/$BRANCH:$HEAD_SHA" origin ":refs/heads/$BRANCH" \
+            || echo "::notice::$BRANCH moved since find; kept for the next run"
 
       - name: Summary
         if: always()
         env:
-          OUTCOME: ${{ job.status }}
+          PUSHED: ${{ steps.push.outcome }}
+          DISPATCHED: ${{ steps.dispatch.outcome }}
+          DELETED: ${{ steps.delete.outcome }}
         run: |
           {
-            if [ "$OUTCOME" = "success" ]; then
-              echo "### Accepted \`$REF\`: merged into main, render dispatched, branch deleted"
+            if [ "$PUSHED" != "success" ]; then
+              echo "### Merge failed for \`$BRANCH\` - main unchanged, the branch is kept"
+            elif [ "$DISPATCHED" != "success" ]; then
+              echo "### \`$BRANCH\` merged into main; the render dispatch failed - re-run it: \`gh workflow run render.yml --ref main\`"
+            elif [ "$DELETED" != "success" ]; then
+              echo "### \`$BRANCH\` merged, render dispatched; deleting the branch failed - delete it by hand"
             else
-              echo "### Accept merge failed for \`$REF\` - the branch is kept"
+              echo "### Accepted \`$BRANCH\`: merged into main, render dispatched, branch retired"
             fi
             if [ -s "$RUNNER_TEMP/problems.txt" ]; then
               echo '```'
-              tail -n 150 "$RUNNER_TEMP/problems.txt"
+              tail -n 100 "$RUNNER_TEMP/problems.txt"
               echo '```'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # check failed, or merge failed before main was pushed: remember the sha so find moves on to the next branch
+  record-failure:
+    needs: [find, check, merge]
+    if: >-
+      always() && needs.find.outputs.branch != '' &&
+      (needs.check.result == 'failure' || (needs.merge.result == 'failure' && needs.merge.outputs.pushed != 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write     # commit state/accept
+    env:
+      BRANCH: ${{ needs.find.outputs.branch }}
+      HEAD_SHA: ${{ needs.find.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Record
+        run: |
+          python3 tools/accept_check.py --record-failure "$BRANCH" "$HEAD_SHA"
+          echo "### \`$BRANCH\` failed at ${HEAD_SHA:0:7}: kept, skipped until it is pushed again (or named in a manual run)" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Save
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash tools/save_state.sh "$(printf 'Accept: %s failed at %s\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>' "$BRANCH" "${HEAD_SHA:0:7}")"

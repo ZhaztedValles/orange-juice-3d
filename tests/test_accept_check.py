@@ -178,3 +178,115 @@ def test_cli_on_a_repo(tmp_path):
     assert "001-queued-one" in r.stdout and "evil.sh" in r.stdout
     r = subprocess.run(cli + ["--paths-only", "main", "HEAD"], cwd=repo, capture_output=True, text=True)
     assert r.returncode == 1 and "001-queued-one" in r.stdout
+
+
+# --- scheduled Accept: branch discovery, workflow tripwire, failure records, -z parsing ---
+
+def test_parse_name_status_z():
+    assert accept_check.parse_name_status_z("M\0a b.ts\0A\0x\ty\0D\0videos/001-x/é.ts\0") == \
+        [("M", "a b.ts"), ("A", "x\ty"), ("D", "videos/001-x/é.ts")]
+    assert accept_check.parse_name_status_z("") == []
+    with pytest.raises(ValueError):
+        accept_check.parse_name_status_z("M\0a\0A\0")
+
+
+def test_parsed_odd_names_still_rejected():
+    changed = accept_check.parse_name_status_z("A\0videos/006-new-story/x\ty.ts\0A\0videos/006-new-story/é.ts\0")
+    assert len(probs(*changed)) == 2
+
+
+def test_workflow_paths():
+    changed = [("A", ".github/workflows/x.yml"), ("M", "videos/006-new-story/Video.tsx"), ("D", ".github/CODEOWNERS"),
+               ("A", ".GitHub/workflows/y.yml"), ("A", ".github"), ("M", "stories/ledger.yml"), ("A", "x/.github/z")]
+    assert accept_check.workflow_paths(changed) == [".github/workflows/x.yml", ".github/CODEOWNERS",
+                                                    ".GitHub/workflows/y.yml", ".github"]
+    assert accept_check.workflow_paths([("A", "videos/006-new-story/Video.tsx")]) == []
+
+
+B = [{"name": "claude/oj-2026-11-11", "sha": "c" * 40, "date": 300},
+     {"name": "claude/oj-2026-11-09", "sha": "a" * 40, "date": 100},
+     {"name": "claude/oj-2026-11-10", "sha": "b" * 40, "date": 200}]
+
+
+def test_pick_oldest_first():
+    assert accept_check.pick_branch(B, failed={}, tripped=set())["name"] == "claude/oj-2026-11-09"
+    assert accept_check.pick_branch([], failed={}, tripped=set()) is None
+
+
+def test_pick_skips_tripped_and_failed_at_same_sha():
+    assert accept_check.pick_branch(B, failed={}, tripped={"claude/oj-2026-11-09"})["name"] == "claude/oj-2026-11-10"
+    failed = {"oj-2026-11-09": "a" * 40, "oj-2026-11-10": "0" * 40}       # 11-10 was pushed again since its failure
+    assert accept_check.pick_branch(B, failed=failed, tripped=set())["name"] == "claude/oj-2026-11-10"
+
+
+def test_pick_only_retries_a_failed_branch_but_never_a_tripped_one():
+    failed = {"oj-2026-11-09": "a" * 40}
+    assert accept_check.pick_branch(B, failed, set(), only="claude/oj-2026-11-09")["name"] == "claude/oj-2026-11-09"
+    assert accept_check.pick_branch(B, failed, {"claude/oj-2026-11-09"}, only="claude/oj-2026-11-09") is None
+    assert accept_check.pick_branch(B, failed, set(), only="claude/oj-nope") is None
+
+
+def test_pick_ignores_bad_names():
+    assert accept_check.pick_branch([{"name": "claude/oj-$(id)", "sha": "d" * 40, "date": 1}], {}, set()) is None
+
+
+def test_tripwire_body_names_branches_and_paths():
+    body = accept_check.tripwire_body([{"branch": "claude/oj-x", "sha": "a" * 40, "paths": [".github/workflows/e.yml"]}])
+    assert "claude/oj-x" in body and ".github/workflows/e.yml" in body and "a" * 40 in body
+
+
+def test_record_failure_roundtrip(tmp_path):
+    accept_check.record_failure(tmp_path, "claude/oj-2026-11-09", "a" * 40)
+    assert accept_check.load_failures(tmp_path) == {"oj-2026-11-09": "a" * 40}
+    with pytest.raises(ValueError):
+        accept_check.record_failure(tmp_path, "claude/../x", "a" * 40)
+
+
+def test_cli_find(tmp_path):
+    """a bare origin with main and three writer branches: one touches .github (tripwire), one failed at its current sha"""
+    origin, ws = tmp_path / "origin.git", tmp_path / "ws"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True)
+    subprocess.run(["git", "clone", "-q", str(origin), str(ws)], check=True, capture_output=True)
+    _git(ws, "config", "user.email", "t@example.com")
+    _git(ws, "config", "user.name", "t")
+    _git(ws, "checkout", "-q", "-b", "main")
+    (ws / "README.md").write_text("x")
+    _git(ws, "add", "-A")
+    _git(ws, "commit", "-q", "-m", "main")
+    _git(ws, "push", "-q", "origin", "main")
+
+    def branch(name, path, when):
+        _git(ws, "checkout", "-q", "-b", name, "main")
+        p = ws / path
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("x")
+        _git(ws, "add", "-A")
+        subprocess.run(["git", "commit", "-q", "-m", name], cwd=ws, check=True,
+                       env={**__import__("os").environ, "GIT_COMMITTER_DATE": f"{1700000000 + when} +0000",
+                            "GIT_AUTHOR_DATE": f"{1700000000 + when} +0000"})
+        _git(ws, "push", "-q", "origin", name)
+        _git(ws, "checkout", "-q", "main")
+        return _git(ws, "rev-parse", name).strip()
+
+    evil = branch("claude/oj-evil", ".github/workflows/e.yml", 1000)
+    failed = branch("claude/oj-failed", "stories/ledger.yml", 2000)
+    branch("claude/oj-good", "stories/banned.yml", 3000)
+    branch("feature/other", "stories/banned.yml", 500)
+    (ws / "state" / "accept").mkdir(parents=True)
+    accept_check.record_failure(ws / "state", "claude/oj-failed", failed)
+    cli = [sys.executable, str(ROOT / "tools" / "accept_check.py"), "--find"]
+    r = subprocess.run(cli + ["--tripwire-out", str(tmp_path / "trip.md")], cwd=ws, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert "claude/oj-evil" in (tmp_path / "trip.md").read_text(encoding="utf-8")
+    import json
+    out = json.loads(r.stdout)
+    assert out["branch"] == "claude/oj-good" and len(out["sha"]) == 40 and out["slug"] == "oj-good"
+    assert out["tripped"] == [{"branch": "claude/oj-evil", "sha": evil, "paths": [".github/workflows/e.yml"]}]
+    r = subprocess.run(cli + ["--only", "claude/oj-failed"], cwd=ws, capture_output=True, text=True)
+    assert json.loads(r.stdout)["branch"] == "claude/oj-failed"
+    r = subprocess.run(cli + ["--only", "claude/oj-evil"], cwd=ws, capture_output=True, text=True)
+    assert json.loads(r.stdout)["branch"] == ""
+    # the CLI records a failure in the repo's state/: the good branch is then skipped too, until it changes
+    rec = [sys.executable, str(ROOT / "tools" / "accept_check.py"), "--record-failure", "claude/oj-good", out["sha"]]
+    assert subprocess.run(rec, cwd=ws, capture_output=True).returncode == 0
+    assert json.loads(subprocess.run(cli, cwd=ws, capture_output=True, text=True).stdout)["branch"] == ""
