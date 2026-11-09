@@ -1,0 +1,9 @@
+{
+ "status": "held",
+ "reasons": [
+  "8 unplanned pop frames (max 2)"
+ ],
+ "attempts": 1,
+ "updated": "2026-11-09T19:22:12+00:00",
+ "source": "0f0bbd65607b4734aebec6a916a6685cb8a03d25"
+}
