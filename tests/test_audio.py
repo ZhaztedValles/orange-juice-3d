@@ -44,7 +44,7 @@ def test_mix_is_exact_length_and_loudness(tmp_path):
     x, sr = sf.read(out / "mix.wav", always_2d=True)
     assert sr == 48000 and x.shape == (int(round(600 / 30 * 48000)), 2)
     assert abs(rep["lufs"] - (-14.0)) <= 0.5
-    assert rep["true_peak_db"] <= -1.0
+    assert rep["true_peak_db"] <= build_mix.CEIL_DBTP + 0.05 <= -1.9  # AAC headroom
     assert abs(dsp.integrated(x.T) - rep["lufs"]) < 0.2  # dsp takes (channels, samples)
 
 
