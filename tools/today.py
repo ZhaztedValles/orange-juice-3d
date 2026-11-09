@@ -29,14 +29,16 @@ def _numbers(ids):
 def plan(paused, queue_ids, render_state: dict, posted: set, video_ids: list, entries, templates=()) -> dict:
     """tonight's plan. Pure: no I/O.
     render_state = {id: state}; templates = ids of template folders (meta.yml `template: true`; `000-bridge` always
-    is one): they are never listed as held and never counted as queued. next_id is one above the highest number among the video folders and the ledger's
+    is one): they are never listed as held and never counted as queued. A held id with no folder in video_ids is not
+    listed (it was dropped already). next_id is one above the highest number among the video folders and the ledger's
     '<NNN>-<slug>' ids (so a dropped story's number is not reused), at least 001."""
     skip = set(templates) | {ledger.TEMPLATE}
     queue_ids = [v for v in queue_ids if v not in skip]
+    folders = set(video_ids)
     held = []
     for vid, st in sorted(render_state.items()):
-        if st.get("status") != "held" or vid in skip:
-            continue
+        if st.get("status") != "held" or vid in skip or vid not in folders:
+            continue    # a held id whose folder is gone was already dropped: never drop it again
         attempts = int(st.get("attempts", 0))
         held.append({"id": vid, "reasons": list(st.get("reasons", [])), "attempts": attempts,
                      "action": "fix" if attempts < FIX_ATTEMPTS else "drop"})

@@ -5,8 +5,15 @@ for it is `Follow docs/WRITER-SMOKE.md in the orange-juice-3d repository exactly
 story, and touches no file outside `smoke/`. Follow the steps in order. If a step fails, record the error and go on
 with the next step; always finish with steps 7 and 8.
 
-1. **Start.** `mkdir -p smoke && date -u +%FT%TZ > /tmp/smoke-start`. Time every step below with `time` (or `date +%s`
-   before and after) and keep the numbers for the report.
+1. **Start.** Go to the root of the `orange-juice-3d` checkout (this routine has 2 repositories): find it, `cd` into
+   it, and check that `git rev-parse --show-toplevel` prints a path ending in `/orange-juice-3d`. Then
+   `mkdir -p smoke && date -u +%FT%TZ > /tmp/smoke-start`. Time every step below with `time` (or `date +%s`
+   before and after) and keep the numbers for the report. Record these up front, before installing anything:
+   ```bash
+   command -v espeak-ng || echo "espeak-ng: not installed"
+   gh auth status 2>&1 || echo "gh: not installed or not logged in"
+   command -v sudo || echo "sudo: not available"
+   ```
 2. **Setup.** Run the setup section of `WRITER.md` (section 2), but name the branch `claude/smoke-<date>` instead of
    `claude/oj-<date>`:
    ```bash
@@ -26,7 +33,11 @@ with the next step; always finish with steps 7 and 8.
    GL=swangle REMOTION_TMP=/tmp/remotion-tmp COMPOSITION=oj-000-bridge node scripts/stills.mjs smoke/bridge_ 100,1000 0.5
    ```
    This writes `smoke/bridge_100.jpg` and `smoke/bridge_1000.jpg`. Record the bundle time and the time per still
-   that the script prints. These 2 stills are our own renders: they are the only images that go into `smoke/`.
+   that the script prints. If this step fails, record the error and the missing system libraries of Remotion's
+   headless shell:
+   ```bash
+   for b in $(find node_modules/.remotion -type f -name 'chrome-headless-shell' 2>/dev/null); do echo "$b"; ldd "$b" | grep "not found"; done
+   ``` These 2 stills are our own renders: they are the only images that go into `smoke/`.
 5. **Voice.** On a copy in `/tmp`, never in the repo:
    ```bash
    mkdir -p /tmp/smoke/videos && cp -r videos/000-bridge /tmp/smoke/videos/000-bridge
@@ -45,6 +56,8 @@ with the next step; always finish with steps 7 and 8.
 7. **Report.** Write `smoke/REPORT.md` with:
    - the start time and the total time;
    - a table of every step with its duration and result (ok or the error, first lines only);
+   - the up-front checks from step 1: `command -v espeak-ng`, `gh auth status`, `command -v sudo`;
+   - the `ldd` "not found" lines, if the stills step failed;
    - versions: `node --version`, `npm --version`, `python --version`, `pip --version`, `git --version`,
      `gh --version` (or "not installed"), `ffmpeg -version | head -1` (or "not installed"), `uname -a`, `nproc`,
      `free -g`, `df -h /tmp .`;

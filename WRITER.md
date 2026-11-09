@@ -6,6 +6,10 @@ cloud session. Nobody will answer questions, so follow these steps in order, lit
 
 ## 1. Who you are and the hard rules
 
+0. This routine checks out 2 repositories. Before anything else, go to the root of `orange-juice-3d`: find it (for
+   example `ls`, `ls ..` or `find / -maxdepth 4 -type d -name orange-juice-3d 2>/dev/null`), `cd` into it, and run
+   `git rev-parse --show-toplevel`; it must print a path ending in `/orange-juice-3d`. Every command in this file runs
+   from there.
 1. If `config.yml` has `paused: true`, stop now: install nothing, write nothing, push nothing.
    If `tools/today.py` says paused, stop and do nothing.
 2. **Stories.** Strange **true** stories from history and science, with **people at the centre** and a **physical cause
@@ -69,7 +73,11 @@ the held videos. If it fails with a `gh` error (no GitHub CLI login), run
 mention it in your summary.
 
 1. If it prints `paused: yes`, stop and do nothing.
-2. **Held videos first.** For each held video with action `fix`:
+2. **Held videos first.** If `videos/<id>` is gone and its ledger entry is already dropped, skip it (it was dropped
+   on an earlier night). For each held video with action `fix`:
+   - spend at most about 45 minutes on it (note the elapsed time when you start). If it is still not `ready` by then,
+     undo your changes (`git checkout -- videos/<id>`), leave it uncommitted for the next night and say so in your
+     summary;
    - read its reasons (also in `state/render/<id>.json`); fix the cause inside `videos/<id>/` (story.ts, cast.ts,
      shots.json, audio.json, narration...). A held video re-renders when its folder is committed again;
    - run section 8 (self-check) on it until `python tools/writer_check.py videos/<id>` prints `ready <id>`;
@@ -126,13 +134,16 @@ mention it in your summary.
 
 1. Create the folder now, by copying (see section 7, item 1): `cp -r videos/<source> videos/<id>`.
 2. **Formula.** `videos/000-bridge/SCRIPT.md` is the worked example of the beats, not of the words. Never reuse its lines
-   or its jokes; the template's narration must be rewritten completely. Beats, in order:
+   or its jokes: the copy of the folder gets an entirely new narration, every sentence rewritten (only the two words
+   "You see," at the pivot are shared). Beats, in order:
    - **Paradox hook:** the absurd fact in one line, the surprise in the first sentence.
    - **Setting:** year, place, who, and what they were proud of.
    - **Escalation:** 3-4 beats, each a little bigger.
    - **Mystery beat:** the moment it goes wrong, before anyone understands why.
-   - **Pivot with an everyday analogy:** one science or cause-and-effect idea explained through something every viewer
-     knows. Never write the stock pivot "You see,": `tools/writer_check.py` rejects it. Pivot in your own words.
+   - **The "You see," pivot with an everyday analogy:** the explanation starts with the words "You see," (capital Y,
+     comma included), followed by one science or cause-and-effect idea explained through something every viewer
+     knows. `tools/writer_check.py` reports a problem when "You see," is missing. The sentence after "You see," is our
+     own: never the bridge's ("every bridge has a rhythm") or its swing analogy.
    - **Ironic payoff:** the consequence, and a last line that twists or calls back to the hook.
 3. About 3.7 words/s, 55-70 s: 195-225 words. Numbers as words ("eighteen thirty-one", "seventy-four"); no digits in
    the narration. Use commas and full stops; avoid em-dashes, ellipses and brackets (they break the word count).
@@ -305,7 +316,7 @@ The look lives in these values; the story lives in story.ts / the world layout /
    empty frames. Then render the changed frames again and repeat.
 5. Stop polishing at the 3-hour budget (check the elapsed time).
 6. Then run `python tools/writer_check.py videos/<id>`. It must print `ready <id>`. It runs the folder contract, the
-   ledger entry, the pace (3.3-4.1 words/s) and the "You see," check. Fix and re-run until it does.
+   ledger entry, the pace (3.3-4.1 words/s) and the required "You see," pivot. Fix and re-run until it does.
 7. `npx vitest run` must pass (Accept runs it on the merged tree).
 
 ## 9. Push
@@ -323,13 +334,18 @@ The look lives in these values; the story lives in story.ts / the world layout /
    python tools/accept_check.py origin/main HEAD      # must print "accepted: ..."
    git push -u origin HEAD
    ```
-   If the rebase conflicts in `stories/ledger.yml` or `stories/banned.yml`, keep main's entries and add yours after them,
-   `git add` the file and `git rebase --continue`. If it conflicts anywhere else, `git rebase --abort` and push nothing.
+   If the rebase conflicts in `stories/ledger.yml` or `stories/banned.yml`, start from main's copy of the file: keep
+   every one of main's entries exactly; for an entry you dropped, apply your `status`, `reason` and `video` change in
+   place to main's copy of that entry; append only your new entries at the end. Then `git add` the file and
+   `git rebase --continue`. If it conflicts anywhere else, `git rebase --abort` and push nothing.
    If `accept_check.py` prints problems, fix them, commit, and re-run it.
 3. One branch per night. Push only work that passed. A new video that is not `ready` at the budget is not committed:
    delete its folder (`rm -rf videos/<id>`) and its new ledger entry (it was never on main), keep any new
-   `stories/banned.yml` entries, and commit what remains. If nothing passed, push nothing and finish with a
-   one-paragraph summary of why.
+   `stories/banned.yml` entries, and commit what remains. Committed held-video fixes, drops and `stories/banned.yml`
+   additions are pushed even when no new video passed (commit the banned additions with
+   `git add stories/banned.yml && git commit -m "Banned: <n> common stories"`). Push nothing only when the branch has
+   no commits at all (`git log --oneline origin/main..HEAD` prints nothing); then finish with a one-paragraph summary
+   of why.
 4. After the push, Accept (on GitHub) re-checks the branch, merges it into main and starts the render. You do nothing
    more with it.
 

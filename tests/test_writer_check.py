@@ -32,9 +32,6 @@ def folder(tmp_path):
     meta = yaml.safe_load((v / "meta.yml").read_text(encoding="utf-8"))
     meta.update(template=False, sources=SOURCES)
     (v / "meta.yml").write_text(yaml.safe_dump(meta), encoding="utf-8")
-    # the template's narration says "You see," once: drop the comma so the folder is clean (words.json is unaffected)
-    s = (v / "SCRIPT.md").read_text(encoding="utf-8")
-    (v / "SCRIPT.md").write_text(s.replace("You see,", "You see"), encoding="utf-8")
     (tmp_path / "stories").mkdir()
     (tmp_path / "stories" / "ledger.yml").write_text(yaml.safe_dump([entry(VID)]), encoding="utf-8")
     return v
@@ -81,16 +78,21 @@ def test_pace_in_range_passes(folder):
     assert pace_problems(folder) == []
 
 
-def test_you_see_pivot(folder):
+def test_clean_folder_has_the_pivot(folder):
+    assert "You see," in (folder / "SCRIPT.md").read_text(encoding="utf-8")
+    assert not any("pivot" in p for p in writer_check.check(folder))
+
+
+def test_missing_you_see_pivot(folder):
     s = folder / "SCRIPT.md"
-    s.write_text(s.read_text(encoding="utf-8").replace("You see", "You see,"), encoding="utf-8")
+    s.write_text(s.read_text(encoding="utf-8").replace("You see,", "You see"), encoding="utf-8")
+    assert any('"You see,"' in p and "pivot" in p for p in writer_check.check(folder))
+
+
+def test_lowercase_you_see_is_not_the_pivot(folder):
+    s = folder / "SCRIPT.md"
+    s.write_text(s.read_text(encoding="utf-8").replace("You see,", "you see,"), encoding="utf-8")
     assert any('"You see,"' in p for p in writer_check.check(folder))
-
-
-def test_lowercase_you_see_is_allowed(folder):
-    s = folder / "SCRIPT.md"
-    s.write_text(s.read_text(encoding="utf-8").replace("You see", "you see,"), encoding="utf-8")
-    assert not any("You see" in p for p in writer_check.check(folder))
 
 
 def test_missing_ledger_entry(folder, tmp_path):

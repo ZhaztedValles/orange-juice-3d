@@ -27,7 +27,7 @@ def test_held_attempts_decide_fix_or_drop():
         "001-a-story": {"status": "held", "reasons": ["too long"], "attempts": 1},
         "002-b-story": {"status": "held", "reasons": ["bad", "worse"], "attempts": 2},
         "003-c-story": {"status": "queued", "reasons": [], "attempts": 0},
-    })
+    }, videos=["000-bridge", "001-a-story", "002-b-story", "003-c-story"])
     assert p["held"] == [
         {"id": "001-a-story", "reasons": ["too long"], "attempts": 1, "action": "fix"},
         {"id": "002-b-story", "reasons": ["bad", "worse"], "attempts": 2, "action": "drop"},
@@ -57,7 +57,8 @@ def test_queued_ids_from_asset_names():
 
 
 def test_summary_and_json_are_serialisable():
-    p = plan(render={"001-a-story": {"status": "held", "reasons": ["r"], "attempts": 0}})
+    p = plan(render={"001-a-story": {"status": "held", "reasons": ["r"], "attempts": 0}},
+             videos=["000-bridge", "001-a-story"])
     json.dumps(p)
     text = today.summary(p)
     assert "make tonight: 1" in text and "001-a-story: fix" in text and "- r" in text
@@ -81,3 +82,10 @@ def test_ledger_owns_the_template_id():
     import writer_check
     assert ledger.TEMPLATE == "000-bridge" == accept_check.TEMPLATE
     assert not hasattr(writer_check, "TEMPLATE")
+
+
+def test_held_id_without_a_folder_is_skipped():
+    # dropped last night: the folder is gone but state/render still says held; it must not be dropped again
+    held = {"status": "held", "reasons": ["r"], "attempts": 2}
+    p = plan(render={"004-gone-one": held, "005-still-here": held}, videos=["000-bridge", "005-still-here"])
+    assert [h["id"] for h in p["held"]] == ["005-still-here"]

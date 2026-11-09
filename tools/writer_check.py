@@ -2,7 +2,7 @@
 
 Usage: python tools/writer_check.py videos/<id>
 Prints `ready <id>` (exit 0), or the problems, one per line (exit 1). Checks, in order: video_check.problems, the story
-ledger (every video except the template 000-bridge needs one coded entry), the narration pace, and the "You see," pivot.
+ledger (every video except the template 000-bridge needs one coded entry), the narration pace, and the required "You see," pivot (case-sensitive, comma included).
 """
 import json
 import sys
@@ -49,8 +49,8 @@ def check(folder, root=None):
     except (OSError, ValueError, TypeError, KeyError, IndexError):
         pass    # a missing or malformed words.json is already reported by video_check
     try:
-        if PIVOT in script_md.narration(folder / "SCRIPT.md"):
-            out.append(f'narration contains "{PIVOT}" (the stock pivot phrase); rewrite that line')
+        if PIVOT not in script_md.narration(folder / "SCRIPT.md"):
+            out.append(f'narration needs the "{PIVOT}" pivot before the everyday analogy')
     except (OSError, ValueError):
         pass    # a missing or malformed SCRIPT.md is already reported by video_check
     return out
