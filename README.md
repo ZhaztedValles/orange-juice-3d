@@ -48,4 +48,6 @@ range on an ubuntu runner and uploads the mp4 and a still.
 - 3D models: [Kenney](https://kenney.nl) — Nature Kit and Fantasy Town Kit, licensed
   [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/). Thank you, Kenney! The models are downloaded by
   `scripts/fetch-kenney.mjs` and are not stored in this repository.
+- Captions font: [Poppins](https://fonts.google.com/specimen/Poppins) Bold by Indian Type Foundry, licensed
+  [SIL OFL 1.1](public/fonts/OFL.txt); bundled in `public/fonts/`.
 - Code: MIT, see `LICENSE`.

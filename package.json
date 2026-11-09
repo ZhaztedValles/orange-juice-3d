@@ -18,6 +18,8 @@
     "@react-three/postprocessing": "3.0.4",
     "@remotion/bundler": "4.0.538",
     "@remotion/cli": "4.0.538",
+    "@remotion/fonts": "4.0.538",
+    "@remotion/layout-utils": "4.0.538",
     "@remotion/renderer": "4.0.538",
     "@remotion/three": "4.0.538",
     "postprocessing": "6.37.8",

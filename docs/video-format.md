@@ -38,6 +38,12 @@ Engine exports a video may use, one per line:
 
 ### `src/engine/captions.ts`
 - `Word`: `{ w: string; s: number; e: number }`, one spoken word with start / end in seconds.
+- `wordAt(words, t)`: index of the word to show at t seconds, or -1 (shows until the next start; hides at e + 0.15 before a pause over 0.40 s; last word until e + 0.30).
+- `cleanWord(w)`: the word as captioned (outer punctuation stripped except `'` and `-`, case kept).
+
+Captions are not a video's job: `src/Root.tsx` wraps every video in `WithCaptions` (`src/engine/WithCaptions.tsx`, overlay in
+`CaptionsOverlay.tsx`; Poppins Bold from `public/fonts/`), driven by `words` from the registry (null = no captions). Input props:
+`{"captions": false}` turns them off (writer review stills); `{"__testWords": Word[]}` overrides the words and is test-only.
 
 ### `src/engine/kit.ts`
 - `loadKenney(names)`: load Kenney models from `public/kenney/` once per name list, as a `Kit` (missing ones left out).
