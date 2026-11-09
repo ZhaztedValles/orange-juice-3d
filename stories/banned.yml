@@ -1,0 +1,51 @@
+# Overused "strange true" stories: every channel has told these, so the writer must not pick them.
+# A candidate claim is blocked when it contains ALL the keywords of an entry (matched on stemmed words), or is worded very
+# like the entry's claim. Keep each entry to 2 specific keywords: the more keywords, the fewer claims it catches.
+# Format: - {claim: "one accurate sentence", keywords: [a, b]}
+# Accents split words (Karánsebes is "kar" + "nsebes"), so such names get one entry per spelling.
+- {claim: "In January 1919 a storage tank burst in Boston's North End and a wave of molasses killed 21 people.", keywords: [molasses, boston]}
+- {claim: "In July 1518 hundreds of people in Strasbourg danced for days, some reportedly until they collapsed.", keywords: [dancing, plague]}
+- {claim: "In 1932 the Australian army was sent with machine guns to cull emus in Western Australia and largely failed.", keywords: [emu, war]}
+- {claim: "Tsutomu Yamaguchi survived the atomic bombings of both Hiroshima and Nagasaki in August 1945.", keywords: [yamaguchi, nagasaki]}
+- {claim: "The Tacoma Narrows Bridge twisted in the wind and collapsed in 1940, months after it opened.", keywords: [tacoma, narrows]}
+- {claim: "In 1814 a vat burst at the Meux brewery in London and a wave of beer killed eight people.", keywords: [beer, flood]}
+- {claim: "Phineas Gage survived an iron rod blasted through his skull in 1848, and his personality reportedly changed.", keywords: [phineas, gage]}
+- {claim: "Mike the headless chicken lived for about eighteen months after his head was cut off in 1945.", keywords: [headless, chicken]}
+- {claim: "In 1962 an outbreak of uncontrollable laughter began at a girls' school in Tanganyika and spread to nearby villages.", keywords: [tanganyika, laughter]}
+- {claim: "Hiroo Onoda kept fighting in the Philippine jungle until 1974, nearly thirty years after the Second World War ended.", keywords: [hiroo, onoda]}
+- {claim: "Unsinkable Sam was a ship's cat said to have survived the sinking of three ships in the Second World War.", keywords: [unsinkable, sam]}
+- {claim: "Violet Jessop, a stewardess, survived the Olympic collision of 1911 and the sinkings of the Titanic and the Britannic.", keywords: [violet, jessop]}
+- {claim: "Women who painted watch dials with radium paint in the 1910s and 1920s were poisoned, and their lawsuits led to safety reforms.", keywords: [radium, girls]}
+- {claim: "In 1923 the jockey Frank Hayes won a race at Belmont Park and was found to have died of a heart attack during it.", keywords: [hayes, jockey]}
+- {claim: "In 1726 Mary Toft convinced doctors that she was giving birth to rabbits, until the hoax was exposed.", keywords: [toft, rabbits]}
+- {claim: "The park ranger Roy Sullivan was struck by lightning seven times and survived every strike.", keywords: [sullivan, lightning]}
+- {claim: "Ching Shih commanded a huge pirate fleet in early nineteenth-century China and negotiated a pardon for herself.", keywords: [ching, shih]}
+- {claim: "In 1876 flakes of meat fell from a clear sky onto a farm in Bath County, Kentucky.", keywords: [kentucky, meat]}
+- {claim: "In 1618 Bohemian nobles threw two Habsburg officials out of a window of Prague Castle, helping to start the Thirty Years' War.", keywords: [defenestration, prague]}
+- {claim: "In 1618 Bohemian nobles defenestrated two Habsburg officials from a window of Prague Castle, who survived the fall.", keywords: [defenestrated, prague]}
+- {claim: "In 1788 Austrian troops reportedly attacked one another in the dark near Karánsebes after a drunken panic.", keywords: [karánsebes, battle]}
+- {claim: "In 1788 Austrian troops reportedly attacked one another in the dark near Karansebes after a drunken panic.", keywords: [karansebes, battle]}
+- {claim: "In 897 Pope Stephen VI put the exhumed corpse of Pope Formosus on trial in the Cadaver Synod.", keywords: [cadaver, synod]}
+- {claim: "Lord Timothy Dexter, an eccentric Massachusetts merchant, reportedly grew rich on deals as unwise as shipping warming pans to the West Indies.", keywords: [timothy, dexter]}
+- {claim: "In the 1840s Ignaz Semmelweis showed that doctors washing their hands cut deaths from childbed fever, but he was ridiculed.", keywords: [semmelweis, hands]}
+- {claim: "In 1917 a collision between two ships in Halifax harbour caused the largest man-made explosion of its time, killing about 2,000 people.", keywords: [halifax, explosion]}
+- {claim: "The Carrington Event of 1859 was a huge solar storm that sparked fires at telegraph offices and lit auroras far into the tropics.", keywords: [carrington, storm]}
+- {claim: "After the 1815 eruption of Mount Tambora, 1816 became known as the Year Without a Summer, with crop failures across the Northern Hemisphere.", keywords: [tambora, summer]}
+- {claim: "After the 1815 eruption of Mount Tambora, 1816 became the Year Without a Summer, with snow in June in New England.", keywords: ["1816", summer]}
+- {claim: "In 1773 colonists boarded three ships in Boston harbour and threw 342 chests of East India Company tea overboard in the Boston Tea Party.", keywords: [boston, tea]}
+- {claim: "When Catholic Europe adopted the Gregorian calendar in October 1582, ten days were skipped.", keywords: [gregorian, calendar]}
+- {claim: "When Britain adopted the Gregorian calendar in September 1752, eleven days were skipped.", keywords: [calendar, "1752"]}
+- {claim: "A famous Ernest Shackleton newspaper advertisement seeking men for a hazardous journey, with bitter cold and safe return doubtful, is probably a myth.", keywords: [shackleton, hazardous]}
+- {claim: "A famous Ernest Shackleton advertisement seeking men for a hazardous journey has never been found in any newspaper.", keywords: [shackleton, advertisement]}
+- {claim: "In 1978 the Soviet physicist Anatoli Bugorski put his head into a particle accelerator beam and survived.", keywords: [bugorski, beam]}
+- {claim: "Cells taken from Henrietta Lacks without her knowledge in 1951 became the HeLa line that scientists still use worldwide.", keywords: [henrietta, lacks]}
+- {claim: "The HeLa cells grown from Henrietta Lacks's tumour were the first human cells to thrive in a laboratory.", keywords: [hela, cells]}
+- {claim: "The Soviet sniper Lyudmila Pavlichenko recorded 309 confirmed kills in the Second World War.", keywords: [lyudmila, pavlichenko]}
+- {claim: "Jack the baboon reportedly worked as a railway signalman's assistant in South Africa in the 1880s.", keywords: [jack, baboon]}
+- {claim: "Wojtek, a bear adopted by Polish soldiers, carried artillery shells at the Battle of Monte Cassino.", keywords: [wojtek, bear]}
+- {claim: "The legend of the Pied Piper of Hamelin may stem from a real event in 1284 in which the town's children vanished.", keywords: [pied, piper]}
+- {claim: "According to legend Rasputin survived poisoning and gunshots before he was killed in 1916.", keywords: [rasputin, poisoning]}
+- {claim: "In 1881 Alexander Graham Bell built a metal detector to find the bullet in President Garfield, but the metal bed frame confused it.", keywords: [bell, garfield]}
+- {claim: "In the summer of 1858 the stench of sewage on the Thames, the Great Stink, pushed Parliament to fund a new sewer system for London.", keywords: [stink, thames]}
+- {claim: "Mary Mallon, known as Typhoid Mary, was a healthy carrier who infected dozens of people while working as a cook.", keywords: [typhoid, mary]}
+- {claim: "In the 1930s a family on the Isle of Man claimed that a talking mongoose named Gef lived in their farmhouse.", keywords: [gef, mongoose]}

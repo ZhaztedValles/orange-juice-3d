@@ -444,3 +444,77 @@ def test_cli_record_infra_prints_the_record(tmp_path):
     r = subprocess.run(cli, cwd=tmp_path, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
     assert json.loads(r.stdout)["attempts"] == 1
+
+
+# --- the story ledger is enforced: every non-template video needs a coded ledger entry; the story files must be valid ---
+
+LEDGER_ENTRY = """- id: 001-new-one
+  claim: "A baker in Lisbon invented a clock"
+  topics: [lisbon, clock]
+  sources: [https://example.org/a, https://example.com/b]
+  scores: {strange: 4, obscurity: 4, people: 3, visual: 4, provable: 4}
+  status: coded
+  reason: ""
+  video: 001-new-one
+  date: "2026-11-10"
+"""
+
+
+def _ledger_repo(tmp_path, ledger_text=None, template=False):
+    """a scratch repo: main has the template; the branch adds videos/001-new-one (copied from the template, made a real
+    video unless template=True) and, when ledger_text is given, stories/ledger.yml. Returns (repo, cli)."""
+    import shutil
+    repo = tmp_path / "r"
+    repo.mkdir(parents=True)
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "t")
+    shutil.copytree(ROOT / "videos" / "000-bridge", repo / "videos" / "000-bridge")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "main")
+    _git(repo, "checkout", "-q", "-b", "claude/oj-x")
+    shutil.copytree(ROOT / "videos" / "000-bridge", repo / "videos" / "001-new-one")
+    if not template:
+        (repo / "videos" / "001-new-one" / "meta.yml").write_text(
+            'title: "Lisbon clock"\ndescription: "A story."\ntags: []\n'
+            'sources: [https://example.org/a, https://example.com/b]\n', encoding="utf-8")
+    if ledger_text is not None:
+        (repo / "stories").mkdir()
+        (repo / "stories" / "ledger.yml").write_text(ledger_text, encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "branch")
+    return repo, [sys.executable, str(ROOT / "tools" / "accept_check.py"), "main", "HEAD"]
+
+
+def test_new_video_without_a_ledger_entry_is_rejected(tmp_path):
+    repo, cli = _ledger_repo(tmp_path)
+    r = subprocess.run(cli, cwd=repo, capture_output=True, text=True)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "001-new-one" in r.stdout and "ledger" in r.stdout
+
+
+def test_new_video_with_its_ledger_entry_is_accepted(tmp_path):
+    repo, cli = _ledger_repo(tmp_path, LEDGER_ENTRY)
+    r = subprocess.run(cli, cwd=repo, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert r.stdout.startswith("accepted")
+
+
+def test_template_video_needs_no_ledger_entry(tmp_path):
+    repo, cli = _ledger_repo(tmp_path, template=True)
+    r = subprocess.run(cli, cwd=repo, capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+def test_malformed_ledger_is_rejected(tmp_path):
+    for text in ("- [unclosed", "just: a mapping", LEDGER_ENTRY.replace("sources: [https://example.org/a, "
+                                                                        "https://example.com/b]", "sources: []")):
+        repo, cli = _ledger_repo(tmp_path / str(abs(hash(text))), text)
+        r = subprocess.run(cli, cwd=repo, capture_output=True, text=True)
+        assert r.returncode == 1 and "stories:" in r.stdout, r.stdout + r.stderr
+
+
+def test_ledger_entry_for_another_video_does_not_count(tmp_path):
+    repo, cli = _ledger_repo(tmp_path, LEDGER_ENTRY.replace("video: 001-new-one", "video: 002-other"))
+    r = subprocess.run(cli, cwd=repo, capture_output=True, text=True)
+    assert r.returncode == 1 and "001-new-one" in r.stdout

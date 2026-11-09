@@ -1,0 +1,13 @@
+# Every story ever considered, so no fact repeats. Schema and rules: tools/ledger.py (python tools/ledger.py validate).
+# Posted/held state is not stored here; it is read from state/.
+- id: idea-broughton-bridge
+  claim: "In 1831 a detachment of soldiers marching in step over the Broughton Suspension Bridge near Manchester broke a bolt and brought the bridge down."
+  topics: [broughton, bridge, soldiers, marching]
+  sources:
+    - https://en.wikipedia.org/wiki/Broughton_Suspension_Bridge
+    - https://manchestervictorianarchitects.org.uk/buildings/suspension-bridge-broughton
+  scores: {strange: 5, obscurity: 2, people: 5, visual: 5, provable: 5}
+  status: dropped
+  reason: "engine template (000-bridge); never use"
+  video: ""
+  date: "2026-11-09"
