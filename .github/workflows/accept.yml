@@ -1,0 +1,308 @@
+# Accept: the gate for the nightly writer's branches (claude/oj-<date>). Ported from FactPop's accept-routine.yml.
+#
+# check (contents: read) - main's trusted accept_check (a git worktree of main, never the branch's copy) on the branch's
+#   diff, `git merge --no-commit --no-ff` into main in the workspace, `npm run gen`, the trusted check again on the
+#   merged tree (path rules + video_check of every touched folder), then the registry check, tsc, pytest, vitest and a
+#   smoke still per touched video (artifact smoke-<branch>).
+# merge (contents: write, actions: write) - a fresh checkout of main: main may have moved since check only in state/
+#   (render state commits); the trusted check runs again on the actual merge (Python only), the registry is regenerated
+#   with main's scripts/gen-registry.mjs, then commit "Accept <branch>", push main (3 tries), dispatch render.yml, and
+#   last delete the branch (force-with-lease on the sha that was checked). On any failure the branch is kept and the
+#   job summary lists the problems.
+#
+# Security (public repo): the branch is writer-authored. Its TSX runs only in check, in vitest (which imports the
+# registry) and the smoke stills - both after every trusted check and after pytest, in a job with contents: read, no
+# secrets, no persisted git credentials, caches restored but never saved. merge holds the write token and runs no
+# writer code: Python static checks, main's gen-registry (it reads folder names only) and git. The push credential is
+# set on the remote only in the push step and removed after it.
+#
+# Residual risk, accepted: GitHub runs the copy of THIS file that is on the pushed branch, so a branch that edits it
+# could skip the checks. Only collaborators can push claude/oj-* (pushes from forks do not run here), the writer is our
+# own agent, and main's checker rejects any change outside videos/<NNN-slug>/ and stories/, so an honest run cannot
+# change this file.
+name: accept
+
+on:
+  push:
+    branches: ["claude/oj-*"]
+
+concurrency:
+  group: oj-accept
+  cancel-in-progress: false
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash          # bash -eo pipefail, so `cmd | tee` fails when cmd fails
+
+jobs:
+  check:
+    if: github.event.deleted != true
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      main_sha: ${{ steps.base.outputs.sha }}
+    env:
+      REF: ${{ github.ref_name }}
+      HEAD_SHA: ${{ github.sha }}
+      TMPDIR: ${{ github.workspace }}/../remotion-tmp
+    steps:
+      - name: Branch name
+        id: ref
+        run: |
+          if [[ ! "$REF" =~ ^claude/oj-[A-Za-z0-9._-]+$ ]]; then
+            echo "::error::not a writer branch name (want claude/oj-[A-Za-z0-9._-]+)"; exit 1
+          fi
+          echo "slug=${REF#claude/}" >> "$GITHUB_OUTPUT"
+
+      # The job starts from main; the branch (HEAD_SHA) is merged into it further down.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Trusted copy of main (the checker runs from here, never from the branch)
+        id: base
+        run: |
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          git worktree add -q --detach "$RUNNER_TEMP/trusted" "$sha"
+          git cat-file -e "$HEAD_SHA^{commit}" 2>/dev/null || git fetch -q --no-tags origin "$HEAD_SHA"
+          git config user.name "orange-juice-autopilot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Install ffmpeg (the short_qa tests need it)
+        run: command -v ffmpeg >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null; }
+
+      - name: Path rules (main's checker on the branch's diff)
+        run: python "$RUNNER_TEMP/trusted/tools/accept_check.py" --paths-only HEAD "$HEAD_SHA" | tee -a "$RUNNER_TEMP/problems.txt"
+
+      - name: Merge the branch into main (not committed)
+        run: |
+          git merge -q --no-commit --no-ff "$HEAD_SHA" || {
+            echo "The branch does not merge cleanly into main" | tee -a "$RUNNER_TEMP/problems.txt"; exit 1; }
+
+      # Node, Remotion's browser and the Kenney models, all from main's own lockfile and scripts (the branch cannot
+      # change them). Caches are only restored here, never saved: render.yml's plan job warms them on main.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Restore node_modules + Remotion browser
+        id: nm
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: nm-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+
+      - name: Install (only when the cache is missing)
+        if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci && npx remotion browser ensure
+
+      - name: Restore Kenney models
+        uses: actions/cache/restore@v4
+        with:
+          path: public/kenney
+          key: kenney-${{ hashFiles('scripts/fetch-kenney.mjs') }}
+
+      - name: Fetch Kenney models (CC0, no-op when restored)
+        run: node scripts/fetch-kenney.mjs
+
+      - name: Regenerate the registry
+        run: npm run gen
+
+      - name: Merged tree (main's checker - path rules, video_check of each touched folder, story files)
+        run: |
+          python "$RUNNER_TEMP/trusted/tools/accept_check.py" --videos-out "$RUNNER_TEMP/videos.txt" "$(git rev-parse HEAD)" "$HEAD_SHA" \
+            | tee -a "$RUNNER_TEMP/problems.txt"
+
+      - name: Registry up to date, TypeScript compiles
+        run: |
+          npm run gen -- --check 2>&1 | tee -a "$RUNNER_TEMP/problems.txt"
+          npx tsc --noEmit 2>&1 | tail -n 60 | tee -a "$RUNNER_TEMP/problems.txt"
+
+      # tests/ is main's (the branch cannot change it); pytest runs before anything executes the branch's TSX
+      - name: pytest
+        run: python -m pytest -q tests 2>&1 | tail -n 60 | tee -a "$RUNNER_TEMP/problems.txt"
+
+      # from here on the branch's video code runs (vitest imports the registry; the stills render it)
+      - name: vitest
+        run: npx vitest run 2>&1 | tail -n 80 | tee -a "$RUNNER_TEMP/problems.txt"
+
+      - name: Smoke stills
+        id: stills
+        run: |
+          mkdir -p "$TMPDIR" smoke
+          while read -r id frames; do
+            if [[ ! "$id" =~ ^[0-9]{3}-[a-z0-9-]{3,50}$ || ! "$frames" =~ ^[0-9]+$ ]]; then
+              echo "bad videos.txt line: $id $frames" | tee -a "$RUNNER_TEMP/problems.txt"; exit 1
+            fi
+            echo "oj-$id: frame $((frames / 2)) of $frames"
+            if ! npx remotion still src/index.ts "oj-$id" "smoke/$id.png" --frame=$((frames / 2)) --scale=0.5 \
+                 --gl=swangle --props='{"captions":false}' > still.log 2>&1; then
+              tail -n 40 still.log
+              echo "smoke still failed for $id" | tee -a "$RUNNER_TEMP/problems.txt"; exit 1
+            fi
+          done < "$RUNNER_TEMP/videos.txt"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.stills.outcome != 'skipped'
+        with:
+          name: smoke-${{ steps.ref.outputs.slug }}
+          path: smoke/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Summary
+        if: always()
+        env:
+          OUTCOME: ${{ job.status }}
+        run: |
+          {
+            if [ "$OUTCOME" = "success" ]; then
+              echo "### Accept check passed for \`$REF\`"
+            else
+              echo "### Accept check failed for \`$REF\` - the branch is kept"
+            fi
+            if [ -s "$RUNNER_TEMP/problems.txt" ]; then
+              echo '```'
+              tail -n 150 "$RUNNER_TEMP/problems.txt"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  merge:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write     # push main, delete the branch
+      actions: write      # dispatch render.yml
+    env:
+      REF: ${{ github.ref_name }}
+      HEAD_SHA: ${{ github.sha }}
+      CHECKED_MAIN: ${{ needs.check.outputs.main_sha }}
+    steps:
+      - name: Branch name
+        run: |
+          if [[ ! "$REF" =~ ^claude/oj-[A-Za-z0-9._-]+$ ]]; then echo "::error::not a writer branch name"; exit 1; fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Main moved only in state/ since the check
+        id: base
+        run: |
+          sha=$(git rev-parse HEAD)
+          if ! git merge-base --is-ancestor "$CHECKED_MAIN" "$sha"; then
+            echo "main is not a descendant of the checked main ($CHECKED_MAIN)" | tee -a "$RUNNER_TEMP/problems.txt"; exit 1
+          fi
+          moved=$(git diff --name-only --no-renames "$CHECKED_MAIN" "$sha" -- . ':(exclude)state')
+          if [ -n "$moved" ]; then
+            { echo "main changed outside state/ since the check; push the branch again to re-check:"; echo "$moved"; } \
+              | tee -a "$RUNNER_TEMP/problems.txt"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          git worktree add -q --detach "$RUNNER_TEMP/trusted" "$sha"
+          git cat-file -e "$HEAD_SHA^{commit}" 2>/dev/null || git fetch -q --no-tags origin "$HEAD_SHA"
+          git config user.name "orange-juice-autopilot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Path rules (main's checker on the branch's diff)
+        run: python "$RUNNER_TEMP/trusted/tools/accept_check.py" --paths-only HEAD "$HEAD_SHA" | tee -a "$RUNNER_TEMP/problems.txt"
+
+      - name: Merge the branch into main (not committed yet)
+        run: |
+          git merge -q --no-commit --no-ff "$HEAD_SHA" || {
+            echo "The branch does not merge cleanly into main" | tee -a "$RUNNER_TEMP/problems.txt"; exit 1; }
+
+      - name: Merged tree (main's checker; static, no video code runs)
+        env:
+          BASE: ${{ steps.base.outputs.sha }}
+        run: python "$RUNNER_TEMP/trusted/tools/accept_check.py" "$BASE" "$HEAD_SHA" | tee -a "$RUNNER_TEMP/problems.txt"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # main's scripts/gen-registry.mjs (the path rules keep scripts/ unchanged): it lists folder names, never imports them
+      - name: Regenerate the registry
+        run: |
+          node scripts/gen-registry.mjs
+          node scripts/gen-registry.mjs --check
+          if git rev-parse -q --verify MERGE_HEAD > /dev/null; then git add src/videos.generated.ts; fi
+
+      - name: Commit, push main, start the render, retire the branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          BASE: ${{ steps.base.outputs.sha }}
+        run: |
+          trap 'git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}"' EXIT
+          if git rev-parse -q --verify MERGE_HEAD > /dev/null; then
+            git commit -q -F - <<EOF
+          Accept $REF
+
+          Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+          EOF
+          else
+            echo "Already in main, nothing to commit."
+          fi
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}"
+          for i in 1 2 3; do
+            if git push -q origin HEAD:refs/heads/main; then break; fi
+            if [ "$i" = 3 ]; then echo "Could not push to main after 3 tries" | tee -a "$RUNNER_TEMP/problems.txt"; exit 1; fi
+            sleep $((i * 5))
+            git fetch -q origin main
+            # only render-state commits may slip in between; anything else needs a fresh check
+            moved=$(git diff --name-only --no-renames "$BASE" origin/main -- . ':(exclude)state')
+            if [ -n "$moved" ]; then
+              { echo "main changed outside state/ during the push; push the branch again to re-check:"; echo "$moved"; } \
+                | tee -a "$RUNNER_TEMP/problems.txt"
+              exit 1
+            fi
+            git merge -q --no-edit origin/main
+          done
+          gh workflow run render.yml --ref main
+          # Last, so a failed push or dispatch leaves the branch for a re-run (which finds main up to date and dispatches
+          # again); deleted only if it still points at the sha that was checked (a newer push keeps its own run)
+          git push -q --force-with-lease="refs/heads/$REF:$HEAD_SHA" origin ":refs/heads/$REF" \
+            || echo "::notice::$REF moved since this run started; kept for its own run"
+
+      - name: Summary
+        if: always()
+        env:
+          OUTCOME: ${{ job.status }}
+        run: |
+          {
+            if [ "$OUTCOME" = "success" ]; then
+              echo "### Accepted \`$REF\`: merged into main, render dispatched, branch deleted"
+            else
+              echo "### Accept merge failed for \`$REF\` - the branch is kept"
+            fi
+            if [ -s "$RUNNER_TEMP/problems.txt" ]; then
+              echo '```'
+              tail -n 150 "$RUNNER_TEMP/problems.txt"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
