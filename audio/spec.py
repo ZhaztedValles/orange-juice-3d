@@ -1,6 +1,7 @@
 """audio.json: loading and validation (see docs/video-format.md, "audio.json")."""
 import inspect
 import json
+import math
 import re
 from pathlib import Path
 
@@ -10,11 +11,12 @@ from .score import KEYS, MOODS
 FPS = 30
 BPM_RANGE = (60, 180)
 GAIN_RANGE = (-30.0, 6.0)
-EPS = 1e-6
+TOL = 1 / 60                                           # half a frame: section edges and the video end
+VOICE_FILES = ("voice.wav", "words.json")
 
 
 def _callable_kinds():
-    """public functions defined in sfx_gen whose parameters other than r / dur all have defaults"""
+    """public functions defined in sfx_gen that take `r` and whose parameters other than r / dur all have defaults"""
     kinds = {}
     for name, fn in inspect.getmembers(sfx_gen, inspect.isfunction):
         if name.startswith("_") or fn.__module__ != sfx_gen.__name__:
@@ -34,9 +36,9 @@ SFX_NEEDS_DUR = frozenset(k for k, d in _KINDS.items() if d)
 
 def frames(folder):
     src = (Path(folder) / "Video.tsx").read_text(encoding="utf-8")
-    m = re.search(r"export const FRAMES\s*=\s*(\d+)", src)
+    m = re.search(r"export const FRAMES\s*=\s*(\d+)\s*;", src)
     if not m:
-        raise ValueError(f"{folder}/Video.tsx: no 'export const FRAMES = <n>'")
+        raise ValueError(f"{folder}/Video.tsx: needs 'export const FRAMES = <integer literal>;'")
     return int(m.group(1))
 
 
@@ -49,7 +51,8 @@ def load(folder):
 
 
 def _num(x):
-    return isinstance(x, (int, float)) and not isinstance(x, bool)
+    """a finite JSON number (json accepts NaN / Infinity)"""
+    return isinstance(x, (int, float)) and not isinstance(x, bool) and math.isfinite(x)
 
 
 def validate(folder):
@@ -65,7 +68,7 @@ def validate(folder):
         return [f"audio.json: {e}"]
     if not isinstance(a, dict):
         return ["audio.json: not an object"]
-    probs = []
+    probs = [f"{f} missing (needed for the mix)" for f in VOICE_FILES if not (folder / f).is_file()]
 
     if a.get("key") not in KEYS:
         probs.append(f"key {a.get('key')!r} unknown (one of {', '.join(KEYS)})")
@@ -80,7 +83,7 @@ def validate(folder):
     secs = []
     for i, s in enumerate(music):
         if not isinstance(s, dict) or not _num(s.get("from")) or not _num(s.get("to")):
-            probs.append(f"music[{i}]: needs numeric from / to")
+            probs.append(f"music[{i}]: needs finite numeric from / to")
             continue
         if s.get("mood") not in MOODS:
             probs.append(f"music[{i}]: mood {s.get('mood')!r} unknown (one of {', '.join(MOODS)})")
@@ -90,12 +93,12 @@ def validate(folder):
     secs.sort()
     edge = 0.0
     for a0, b0 in secs:
-        if a0 > edge + EPS:
+        if a0 > edge + TOL:
             probs.append(f"music: gap between {edge:g} and {a0:g}")
-        elif a0 < edge - EPS:
+        elif a0 < edge - TOL:
             probs.append(f"music: overlap between {a0:g} and {edge:g}")
         edge = max(edge, b0)
-    if secs and abs(edge - dur) > EPS:
+    if secs and abs(edge - dur) > TOL:
         probs.append(f"music: sections end at {edge:g}, video lasts {dur:g} (gap or overlap at the end)")
 
     sfx = a.get("sfx", [])
@@ -109,14 +112,16 @@ def validate(folder):
         kind, t = e.get("kind"), e.get("t")
         if not _num(t) or not 0 <= t < dur:
             probs.append(f"sfx[{i}]: t {t!r} outside [0, {dur:g})")
-        if kind not in _KINDS:
+        if not isinstance(kind, str) or kind not in _KINDS:
             probs.append(f"sfx[{i}]: kind {kind!r} unknown (see SFX_KINDS)")
         elif kind in SFX_NEEDS_DUR:
             d = e.get("dur")
             if d is None:
                 probs.append(f"sfx[{i}]: {kind} needs dur")
             elif not _num(d) or d <= 0:
-                probs.append(f"sfx[{i}]: dur {d!r} must be > 0")
+                probs.append(f"sfx[{i}]: dur {d!r} must be a finite number > 0")
+            elif _num(t) and t + d > dur + TOL:
+                probs.append(f"sfx[{i}]: t + dur = {t + d:g} runs past the end ({dur:g})")
         elif "dur" in e:
             probs.append(f"sfx[{i}]: {kind} takes no dur")
         g = e.get("gain_db", 0)

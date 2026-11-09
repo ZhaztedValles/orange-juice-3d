@@ -5,7 +5,6 @@
 writes mix.wav (48 kHz stereo 24-bit, exactly round(FRAMES / 30 * 48000) samples), stem_voice.wav, stem_music.wav,
 stem_sfx.wav (32-bit float, each with the master gain, before the limiter) and mix_report.json {lufs, true_peak_db, samples}.
 """
-import inspect
 import json
 import re
 import sys
@@ -122,7 +121,7 @@ def sfx_event(i, e):
     """one event -> (start time, stereo audio)"""
     fn = getattr(sfx_gen, e["kind"])
     kw = {"r": rng(i)}
-    if "dur" in inspect.signature(fn).parameters:
+    if e["kind"] in spec.SFX_NEEDS_DUR:
         kw["dur"] = float(e["dur"])
     y = fn(**kw)
     t = float(e["t"])
@@ -143,9 +142,16 @@ def _gain_to(x, target):
     return x * dbg(target - lv) if np.isfinite(lv) else x
 
 
-def build(folder, outdir, diag=None):
-    """diag: optional dict, filled with intermediate signals for analysis"""
-    folder, outdir = Path(folder), Path(outdir)
+def build(folder, outdir):
+    """validate, mix and write videos/<id> -> outdir; returns the report"""
+    probs = spec.validate(folder)
+    if probs:
+        raise ValueError(f"{folder}: " + "; ".join(probs))
+    return _mix(Path(folder), Path(outdir))[0]
+
+
+def _mix(folder, outdir):
+    """the mix itself -> (report, intermediate signals for analysis)"""
     n = int(round(spec.frames(folder) / spec.FPS * SR))
     a = spec.load(folder)
     words = json.loads((folder / "words.json").read_text(encoding="utf-8"))
@@ -156,14 +162,14 @@ def build(folder, outdir, diag=None):
         raise ValueError(f"{folder}/voice.wav is silent")
 
     music_raw = score.render(a["music"], a["key"], a["bpm"], n / SR, video_seed(folder)).T
-    duck = dbg(duck_db([(w["s"], w["e"]) for w in words], n))[None, :]
+    music_ducked = music_raw * dbg(duck_db([(w["s"], w["e"]) for w in words], n))[None, :]
     sfx_raw = np.zeros((2, n))
     for i, e in enumerate(a.get("sfx", [])):
         t, y = sfx_event(i, e)
         place(sfx_raw, y, t)
 
-    def beds(lv):
-        return _gain_to(music_raw, lv - MUSIC_BELOW_VOICE_DB) * duck, _gain_to(sfx_raw, lv - SFX_BELOW_VOICE_DB)
+    def beds(lv):                                        # the bridge's stems were final, so music is set after ducking
+        return _gain_to(music_ducked, lv - MUSIC_BELOW_VOICE_DB), _gain_to(sfx_raw, lv - SFX_BELOW_VOICE_DB)
 
     # voice peak ceiling: after the master gain (-14 LUFS for the whole sum) the voice alone peaks at VOICE_PEAK_DBTP
     # (taming lowers lv a little, which moves the beds and the master gain: settle it in a few passes)
@@ -184,16 +190,15 @@ def build(folder, outdir, diag=None):
             break
         g *= dbg(TARGET_LUFS - lufs)
 
-    if diag is not None:
-        diag.update(voice_raw=voice_raw, voice_gain=vgain, voice=voice, music=music, sfx=sfx, master_gain=g,
-                    master_limiter_gain=_gr)
+    diag = dict(voice_raw=voice_raw, voice_gain=vgain, voice=voice, music=music, sfx=sfx, master_gain=g,
+                master_limiter_gain=_gr)
     outdir.mkdir(parents=True, exist_ok=True)
     write_wav(str(outdir / "mix.wav"), mix)
     for name, x in (("voice", voice), ("music", music), ("sfx", sfx)):   # float: before the limiter they may pass 0 dBFS
         sf.write(str(outdir / f"stem_{name}.wav"), (x * g).T.astype(np.float32), SR, subtype="FLOAT")
     rep = {"lufs": round(float(lufs), 2), "true_peak_db": round(float(true_peak(mix)), 2), "samples": int(mix.shape[1])}
     (outdir / "mix_report.json").write_text(json.dumps(rep, indent=2) + "\n", encoding="utf-8")
-    return rep
+    return rep, diag
 
 
 def main(argv):
@@ -202,7 +207,7 @@ def main(argv):
         return 2
     probs = spec.validate(argv[0])
     if probs:
-        print(f"{argv[0]}/audio.json has problems:", file=sys.stderr)
+        print(f"{argv[0]} has problems:", file=sys.stderr)
         for p in probs:
             print(f"  - {p}", file=sys.stderr)
         return 1

@@ -9,10 +9,10 @@ entry with the id `oj-<id>`, 1080x1920 at 30 fps.
 
 | File | Required | Contents |
 |---|---|---|
-| `Video.tsx` | yes | `export const FRAMES = <integer literal>;` (duration at 30 fps; `audio/spec.py` reads it with the regex `export const FRAMES\s*=\s*(\d+)`) and `export default` a `React.FC` with no props. |
+| `Video.tsx` | yes | `export const FRAMES = <integer literal>;` (duration at 30 fps; `audio/spec.py` reads it with the regex `export const FRAMES\s*=\s*(\d+)\s*;`, so no expressions) and `export default` a `React.FC` with no props. |
 | `meta.yml` | yes | `title`, `template` (true = never queued or posted), `description`, `tags`. |
-| `words.json` | no | `Word[]` (`{ w, s, e }`, seconds) from `src/engine/captions.ts`; the registry imports it when present. |
-| `voice.wav` | no | Narration from `tools/voice.py` (mono). |
+| `words.json` | for the mix | `Word[]` (`{ w, s, e }`, seconds) from `src/engine/captions.ts`; the registry imports it when present. |
+| `voice.wav` | for the mix | Narration from `tools/voice.py` (mono). `audio/spec.py` reports it (and `words.json`) missing. |
 | `audio.json` | no | Score sections and SFX events for `audio/build_mix.py` (see below). |
 | anything else | no | The video's own modules (story timeline, world, cast, town...). They import the engine from `../../src/engine/`. |
 
@@ -44,15 +44,16 @@ Rules:
 ```
 
 Rules (`DUR = FRAMES / 30`):
-- `music` sections cover 0..DUR with no gaps or overlaps. `mood` is one of `hook`, `playful`, `march`, `warm`,
+- Every number is a finite JSON number (no `NaN` / `Infinity`).
+- `music` sections cover 0..DUR with no gaps or overlaps (edges match within half a frame, 1/60 s). `mood` is one of `hook`, `playful`, `march`, `warm`,
   `tension`, `mystery`, `sad`, `none` (silence).
 - `key`: `C C# Db D D# Eb E F F# Gb G G# Ab A A# Bb B` (major; the minor moods use its relative minor).
   `bpm`: 60..180.
-- `sfx` events: `t` in [0, DUR); `kind` from the list below; `dur` (> 0) is required for the kinds marked (dur) and not
-  allowed for the others; `gain_db` in [-30, 6] (default 0); `pan` in [-1, 1] (default 0). No other fields: the rng
+- `sfx` events: `t` in [0, DUR); `kind` from the list below; `dur` (> 0, `t + dur` <= DUR + 1/60) is required for the kinds marked
+  (dur) and not allowed for the others; `gain_db` in [-30, 6] (default 0); `pan` in [-1, 1] (default 0). No other fields: the rng
   (seeded with the event's index) and `dur` are the only arguments passed.
-- SFX kinds (`audio.spec.SFX_KINDS`: the public functions of `audio/sfx_gen.py` whose other parameters all have
-  defaults): `applause` (dur), `bird_chirps` (dur), `bolt_snap`, `bolt_strain` (dur), `boot`, `breeze` (dur),
+- SFX kinds (`audio.spec.SFX_KINDS`: the public functions defined in `audio/sfx_gen.py` that take an `r` parameter
+  and whose parameters other than `r` / `dur` all have defaults): `applause` (dur), `bird_chirps` (dur), `bolt_snap`, `bolt_strain` (dur), `boot`, `breeze` (dur),
   `chain_groan` (dur), `chain_whip`, `clink` (dur), `column_stomp`, `creak` (dur), `crickets` (dur),
   `flag_flutter` (dur), `hammer_hit`, `oof`, `push_thump`, `rattle` (dur), `splash_big`, `stroll_step`,
   `swing_squeak`, `timber_tear` (dur), `water_bed` (dur), `whoa` (dur), `whoosh` (dur), `wood_crack`.
@@ -68,8 +69,8 @@ room (rt60 0.6 s).
 Mix: first `tame_voice_peaks` removes the voice's transient peaks (Kokoro emits half-cycle spikes at sentence
 onsets): wherever its 4x-oversampled peak passes a ceiling, the gain dips with a 1 ms look-ahead and returns to 1 over
 15 ms; the ceiling is set so that after the master gain the voice alone peaks at -2 dBTP. Nothing else touches the
-voice. Then, with the tamed voice's integrated loudness `Lv`, music is set to `Lv - 10.4` LUFS integrated and ducked -3 dB
-while words are spoken (0.08 s before to 0.12 s after each word), SFX are summed and set to `Lv - 13.7`; these are
+voice. Then, with the tamed voice's integrated loudness `Lv`, music is ducked -3 dB while words are spoken (0.08 s before to
+0.12 s after each word) and then set to `Lv - 10.4` LUFS integrated (measured after the duck, as the bridge's final stems were), SFX are summed and set to `Lv - 13.7`; these are
 the bridge's stem balance (voice -15.4, music -25.8, sfx -29.1 LUFS; `MUSIC_BELOW_VOICE_DB`, `SFX_BELOW_VOICE_DB` in
 `audio/build_mix.py`). The voice gets no EQ or compression. One master gain brings the sum to -14.0 LUFS integrated, then a true-peak
 limiter (ceiling -1.2 dBTP) keeps it at or below -1 dBTP.
