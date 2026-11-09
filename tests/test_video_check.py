@@ -45,6 +45,11 @@ def has(v, *needles):
     return any(all(n in p for n in needles) for p in probs(v))
 
 
+def rejected(v, file, spec):
+    """the import of `spec` in `file` is reported with the exact `not allowed` message"""
+    return any(p.startswith(f"{file}: import {spec!r} not allowed") for p in probs(v))
+
+
 def set_meta(v, **kw):
     m = yaml.safe_load((v / "meta.yml").read_text(encoding="utf-8"))
     m.update(kw)
@@ -155,6 +160,16 @@ def test_meta_sources(tmp_path, sources):
     assert has(v, "sources")
 
 
+def test_meta_sources_duplicates_count_once(tmp_path):
+    v = good(tmp_path)
+    set_meta(v, sources=["https://a.example/x", "https://a.example/x"])
+    assert has(v, "sources", "distinct")
+    set_meta(v, sources=["https://a.example/x", "https://a.example/x/"])
+    assert has(v, "sources", "distinct")
+    set_meta(v, sources=["https://a.example/x", "https://a.example/y"])
+    assert probs(v) == []
+
+
 def test_meta_sources_http_ok(tmp_path):
     v = good(tmp_path)
     set_meta(v, sources=["http://a.example/x", "https://b.example/y", "https://c.example"])
@@ -212,6 +227,12 @@ def test_template_not_exempt_from_maximum(tmp_path):
     v = good(tmp_path, template=True)
     set_frames(v, 2101)
     assert has(v, "FRAMES", "2100")
+
+
+def test_frames_must_be_declared_once(tmp_path):
+    v = good(tmp_path)
+    (v / "Video.tsx").write_text("// export const FRAMES = 1800;\nexport const FRAMES = 3000;\n")
+    assert has(v, "FRAMES", "once")
 
 
 def test_frames_must_be_literal(tmp_path):
@@ -288,6 +309,15 @@ def test_words_hyphen_and_apostrophe_are_significant(tmp_path):
     (v / "SCRIPT.md").write_text("<!-- narration -->\nthirty-one isn't\n<!-- /narration -->\n", encoding="utf-8")
     (v / "words.json").write_text(json.dumps([{"w": "thirtyone", "s": 1, "e": 2}, {"w": "isnt", "s": 2, "e": 3}]))
     assert has(v, "narration")
+
+
+def test_words_structure_still_checked_without_script(tmp_path):
+    v = good(tmp_path)
+    (v / "SCRIPT.md").unlink()
+    set_words(v, lambda w: w[2].update(e=w[2]["s"]))
+    ps = probs(v)
+    assert any("SCRIPT.md missing" in p for p in ps) and any("s < e" in p for p in ps)
+    assert not any("differ from the narration" in p for p in ps)
 
 
 def test_narration_problem_is_reported(tmp_path):
@@ -436,7 +466,7 @@ def add_ts(v, text, name="extra.ts"):
 def test_forbidden_import(tmp_path):
     v = good(tmp_path)
     add_ts(v, 'import { x } from "../../tools/thing";\n')
-    assert any("import" in p and "../../tools/thing" in p for p in probs(v))
+    assert rejected(v, "extra.ts", "../../tools/thing")
 
 
 @pytest.mark.parametrize("spec", ["lodash", "three/addons/loaders/GLTFLoader.js", "three/src/core/Object3D", "threejs",
@@ -444,11 +474,28 @@ def test_forbidden_import(tmp_path):
                                   "../../src/engine/nope", "../../src/engine/math/../../../tools/x",
                                   "../../src/engine/captions.test", "../../src/engine/", "./sub/file", "./missing",
                                   "../../../x", "/etc/passwd", "https://evil.example/x.js", "node:path", "path",
-                                  "three/examples/jsm/../../src/x", "three/examples/jsm/", "./../words"])
+                                  "three/examples/jsm/../../src/x", "three/examples/jsm/", "./../words",
+                                  "../../../etc/a'b", "three/examples/jsm/x!=!/etc/passwd", "three/examples/jsm/x.js?raw",
+                                  "three/examples/jsm/x#frag", "three/examples/jsm/a b"])
 def test_import_rejected(tmp_path, spec):
     v = good(tmp_path)
     add_ts(v, f'import x from "{spec}";\n')
-    assert has(v, "import", spec)
+    assert rejected(v, "extra.ts", spec), probs(v)
+
+
+def test_single_quoted_specifier_containing_a_double_quote_is_checked(tmp_path):
+    v = good(tmp_path)
+    add_ts(v, "import x from '../../../etc/a\"b';\n")
+    assert rejected(v, "extra.ts", '../../../etc/a"b'), probs(v)
+
+
+@pytest.mark.parametrize("code", ['import x from "abc\nconst y = 1;\n', "import x from `lodash`;\n", "import x from 'abc\n",
+                                  'export * from\n"abc', 'import "abc\n', 'import x from "a\\"b";\n'])
+def test_unparseable_specifier_fails_closed(tmp_path, code):
+    v = good(tmp_path)
+    add_ts(v, code)
+    assert has(v, "extra.ts", "import", "cannot be parsed") or any(
+        p.startswith("extra.ts: import") and "not allowed" in p for p in probs(v)), probs(v)
 
 
 @pytest.mark.parametrize("spec", ["react", "three", "remotion", "@remotion/three", "@react-three/fiber",
@@ -460,7 +507,8 @@ def test_import_allowed(tmp_path, spec):
     v = good(tmp_path)
     add_ts(v, "export const k = 1;\n", "helper.ts")
     add_ts(v, f'import x from "{spec}";\nexport default x;\n', "user.tsx")
-    assert not has(v, "import"), probs(v)
+    assert not has(v, "not allowed", "cannot be parsed"), probs(v)
+    assert probs(v) == [], probs(v)
 
 
 def test_import_forms_are_all_checked(tmp_path):
@@ -477,14 +525,15 @@ def test_import_forms_are_all_checked(tmp_path):
     for n, t in cases.items():
         add_ts(v, t, n)
     ps = probs(v)
-    for spec in ("evil-side-effect", "evil-multiline", "evil-reexport", "evil-single", "evil-type", "evil-ns", "evil-nospace"):
-        assert any("import" in p and spec in p for p in ps), spec
+    for n, spec in (("a.ts", "evil-side-effect"), ("b.ts", "evil-multiline"), ("c.ts", "evil-reexport"), ("d.ts", "evil-single"),
+                    ("e.ts", "evil-type"), ("f.ts", "evil-ns"), ("g.ts", "evil-nospace")):
+        assert rejected(v, n, spec), spec
 
 
 def test_import_problem_names_the_file(tmp_path):
     v = good(tmp_path)
     add_ts(v, 'import x from "lodash";\n', "evil.ts")
-    assert has(v, "evil.ts", "lodash")
+    assert rejected(v, "evil.ts", "lodash")
 
 
 def test_engine_module_names_come_from_the_engine_dir():
@@ -496,17 +545,31 @@ def test_engine_module_names_come_from_the_engine_dir():
 # --- forbidden tokens ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("token,code", [
-    ("fetch(", 'const r = fetch("https://x");'),
-    ("fetch(", "const r = window.fetch ('https://x');"),
+    ("fetch", 'const r = fetch("https://x");'),
+    ("fetch", "const r = window.fetch ('https://x');"),
     ("XMLHttpRequest", "const r = new XMLHttpRequest();"),
-    ("eval(", 'eval("1+1");'),
-    ("eval(", 'const e = eval ("1");'),
-    ("new Function", 'const f = new Function("return 1");'),
-    ("new Function", "const f = new  Function('a');"),
-    ("require(", 'const x = require("y");'),
+    ("eval", 'eval("1+1");'),
+    ("eval", 'const e = eval ("1");'),
+    ("Function", 'const f = new Function("return 1");'),
+    ("Function", "const f = new  Function('a');"),
+    ("require", 'const x = require("y");'),
     ("process.", "const e = process.env.X;"),
     ("import(", 'const m = import("./y");'),
     ("import(", 'const m = import ("./y");'),
+    ("import(", 'const m = import /*c*/ ("./y");'),
+    ("import(", 'const m = import // c\n("./y");'),
+    ("fetch", 'const r = fetch?.("x");'),
+    ("fetch", "const f = window.fetch;"),
+    ("fetch", 'const f = self["fetch"];'),
+    ("require", 'const r = require; r("x");'),
+    ("Function", 'const x = Function("return 1")();'),
+    ("Function", "const F: Function = null as any;"),
+    ("globalThis", 'globalThis["fe"+"tch"]("x");'),
+    ("WebSocket", 'const w = new WebSocket("wss://x");'),
+    ("EventSource", 'const e = new EventSource("https://x");'),
+    ("sendBeacon", 'navigator.sendBeacon("https://x", "d");'),
+    ("importScripts", 'importScripts("https://x/y.js");'),
+    ("eval", "const e = (0, eval);"),
     ("child_process", 'const c = "child_process";'),
     ("fs", 'import fs from "fs";'),
     ("fs", 'import fs from "node:fs";'),
@@ -523,13 +586,13 @@ def test_forbidden_token_in_comment_and_string_still_counts(tmp_path):
     v = good(tmp_path)
     add_ts(v, '// we never call eval(x) here\nexport const s = "XMLHttpRequest";\n')
     ps = probs(v)
-    assert any("eval(" in p for p in ps) and any("XMLHttpRequest" in p for p in ps)
+    assert any("`eval`" in p for p in ps) and any("XMLHttpRequest" in p for p in ps)
 
 
 def test_forbidden_token_in_tsx_and_message_names_file(tmp_path):
     v = good(tmp_path)
     add_ts(v, "export default () => { fetch('x'); return null; };\n", "Page.tsx")
-    assert has(v, "Page.tsx", "fetch(")
+    assert has(v, "Page.tsx", "`fetch`")
 
 
 def test_forbidden_token_checked_in_main_video_file(tmp_path):
@@ -546,6 +609,9 @@ def test_forbidden_token_checked_in_main_video_file(tmp_path):
     "const important = 1; const reimport = 2; const importance = 3;",
     "const prefetch2 = 1; const livefetch = 2; const evaluate = (n: number) => n; const retrieval = 1;",
     "const a = 'xfs'; const b = \"fsck\";",
+    "const functional = 1; const Functions = 2; const MyFunction = 3; const FunctionKind = 4; const reFunction = 5;",
+    "const globalThisValue = 1; const fetched = 2; const fetcher = 3; const requirement = 4; const required = 5;",
+    "const evaluated = 1; const webSocketLike = 2; const MyEventSourceX = 3;",
 ])
 def test_similar_words_do_not_trip_the_token_scan(tmp_path, code):
     v = good(tmp_path)

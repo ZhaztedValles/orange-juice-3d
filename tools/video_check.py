@@ -40,20 +40,27 @@ PACKAGES = frozenset(("react", "three", "remotion", "@remotion/three", "@react-t
 JSM = "three/examples/jsm/"
 ENGINE_RE = re.compile(r"\.\./\.\./src/engine/([A-Za-z0-9_-]+)")
 SIBLING_RE = re.compile(r"\./([A-Za-z0-9_][A-Za-z0-9_.-]*)")
-FROM_RE = re.compile(r"""\bfrom\s*(["'])([^"'\n]*)\1""")          # import ... from "x" / export ... from "x"
-SIDE_RE = re.compile(r"""\bimport\s*(["'])([^"'\n]*)\1""")        # import "x"
+JSM_RE = re.compile(r"[A-Za-z0-9_./-]+")
+FRAMES_RE = re.compile(r"export const FRAMES\s*=")
+SPEC_START_RE = re.compile(r"""\b(?:from|import)\s*(?=["'`])""")   # `from "x"` (import / export ... from) and `import "x"`
+SPEC_RE = re.compile(r"""(?:"([^"\n]*)"|'([^'\n]*)')""")            # one single-line string, either quote
 
 # Forbidden anywhere in .ts/.tsx (comments and string literals included: conservative on purpose).
 FORBIDDEN = (
-    ("fetch(", re.compile(r"\bfetch\s*\(")),
+    ("fetch", re.compile(r"\bfetch\b")),
     ("XMLHttpRequest", re.compile(r"XMLHttpRequest")),
-    ("eval(", re.compile(r"\beval\s*\(")),
-    ("new Function", re.compile(r"\bnew\s+Function\b")),
-    ("require(", re.compile(r"\brequire\s*\(")),
+    ("eval", re.compile(r"\beval\b")),
+    ("Function", re.compile(r"\bFunction\b")),                      # also `new Function`
+    ("require", re.compile(r"\brequire\b")),
     ("process.", re.compile(r"\bprocess\s*\.")),
-    ("import(", re.compile(r"\bimport\s*\(")),
+    ("import(", re.compile(r"\bimport\s*(?:\(|/[*/])")),             # import(...), also import /*c*/ (...)
     ("child_process", re.compile(r"child_process")),
-    ("fs", re.compile(r"""["'](?:node:)?fs(?:/[^"'\n]*)?["']""")),    # the module, never a substring like "offset"
+    ("globalThis", re.compile(r"\bglobalThis\b")),
+    ("WebSocket", re.compile(r"\bWebSocket\b")),
+    ("EventSource", re.compile(r"\bEventSource\b")),
+    ("sendBeacon", re.compile(r"sendBeacon")),
+    ("importScripts", re.compile(r"importScripts")),
+    ("fs",re.compile(r"""["'](?:node:)?fs(?:/[^"'\n]*)?["']""")),    # the module, never a substring like "offset"
 )
 
 
@@ -126,8 +133,8 @@ def _check_meta(meta, tpl):
         bad = [u for u in src if not _url_ok(u)]
         if bad:
             out.append(f"meta.yml: sources must be http(s) URLs, not {bad[0]!r}")
-        elif len(src) < 2 and not tpl:
-            out.append("meta.yml: sources needs at least 2 http(s) URLs")
+        elif len({u.strip().rstrip("/") for u in src}) < 2 and not tpl:
+            out.append("meta.yml: sources needs at least 2 distinct http(s) URLs")
     return out
 
 
@@ -164,6 +171,8 @@ def _check_words(folder, frames):
                 out.append(f"words.json: entry {i} starts at {words[i]['s']} before entry {i - 1} ({words[i - 1]['s']}); s must be non-decreasing")
         if frames is not None and words[-1]["e"] > frames / FPS + 1e-6:
             out.append(f"words.json: last word ends at {words[-1]['e']} s, after the video end (FRAMES/30 = {frames / FPS:g} s)")
+    if not (folder / "SCRIPT.md").is_file():               # reported as missing; only the comparison cannot run
+        return out
     try:
         text = narration(folder / "SCRIPT.md")
     except (OSError, ValueError) as e:
@@ -235,8 +244,8 @@ def _spec_ok(spec_, folder, files, engine):
     if spec_ in PACKAGES:
         return True
     if spec_.startswith(JSM):
-        rest = spec_[len(JSM):].split("/")
-        return all(p not in ("", ".", "..") for p in rest)
+        rest = spec_[len(JSM):]
+        return bool(JSM_RE.fullmatch(rest)) and all(p not in ("", ".", "..") for p in rest.split("/"))
     m = ENGINE_RE.fullmatch(spec_)
     if m:
         return m.group(1) in engine
@@ -258,8 +267,14 @@ def _check_code(folder, files, engine):
             out.append(f"{name}: cannot read as utf-8 ({e})")
             continue
         seen = set()
-        for m in list(FROM_RE.finditer(text)) + list(SIDE_RE.finditer(text)):
-            s = m.group(2)
+        for m in SPEC_START_RE.finditer(text):
+            q = SPEC_RE.match(text, m.end())
+            if q is None:                                   # unterminated, template literal, ...: fail closed
+                if "<unparsed>" not in seen:
+                    seen.add("<unparsed>")
+                    out.append(f"{name}: import specifier cannot be parsed (use a plain single-line quoted string)")
+                continue
+            s = q.group(1) if q.group(1) is not None else q.group(2)
             if s not in seen and not _spec_ok(s, folder, files, engine):
                 seen.add(s)
                 out.append(f"{name}: import {s!r} not allowed (only react, three, three/examples/jsm/*, remotion, @remotion/three, "
@@ -320,12 +335,16 @@ def problems(folder):
         except (OSError, ValueError) as e:
             out.append(str(e))
         if frames is not None:
+            decls = len(FRAMES_RE.findall((folder / "Video.tsx").read_text(encoding="utf-8")))
+            if decls > 1:
+                out.append(f"Video.tsx: FRAMES is declared {decls} times; declare it exactly once as 'export const FRAMES = <integer>;' "
+                           f"(it is read textually, the first declaration wins)")
             lo = 1 if tpl else MIN_FRAMES
             if not lo <= frames <= MAX_FRAMES:
                 out.append(f"Video.tsx: FRAMES {frames} outside {lo}-{MAX_FRAMES}"
                            + (" (template: 70 s at most)" if tpl else " (55-70 s at 30 fps)"))
 
-    if "words.json" in files and "SCRIPT.md" in files:
+    if "words.json" in files:
         out += _check_words(folder, frames)
     elif "SCRIPT.md" in files:
         try:
