@@ -37,7 +37,9 @@ with the next step; always finish with steps 7 and 8.
    headless shell:
    ```bash
    for b in $(find node_modules/.remotion -type f -name 'chrome-headless-shell' 2>/dev/null); do echo "$b"; ldd "$b" | grep "not found"; done
-   ``` These 2 stills are our own renders: they are the only images that go into `smoke/`.
+   ```
+
+   These 2 stills are our own renders: they are the only images that go into `smoke/`.
 5. **Voice.** On a copy in `/tmp`, never in the repo:
    ```bash
    mkdir -p /tmp/smoke/videos && cp -r videos/000-bridge /tmp/smoke/videos/000-bridge

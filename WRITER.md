@@ -76,7 +76,7 @@ mention it in your summary.
 2. **Held videos first.** If `videos/<id>` is gone and its ledger entry is already dropped, skip it (it was dropped
    on an earlier night). For each held video with action `fix`:
    - spend at most about 45 minutes on it (note the elapsed time when you start). If it is still not `ready` by then,
-     undo your changes (`git checkout -- videos/<id>`), leave it uncommitted for the next night and say so in your
+     undo your changes (`git checkout -- videos/<id> && git clean -fdq videos/<id>`), leave it uncommitted for the next night and say so in your
      summary;
    - read its reasons (also in `state/render/<id>.json`); fix the cause inside `videos/<id>/` (story.ts, cast.ts,
      shots.json, audio.json, narration...). A held video re-renders when its folder is committed again;
