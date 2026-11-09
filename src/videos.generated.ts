@@ -3,9 +3,12 @@ import type React from "react";
 import type { Word } from "./engine/captions";
 import V000, { FRAMES as F000 } from "../videos/000-bridge/Video";
 import W000 from "../videos/000-bridge/words.json";
+import V001, { FRAMES as F001 } from "../videos/001-accept-test/Video";
+import W001 from "../videos/001-accept-test/words.json";
 
 export type VideoEntry = { id: string; Component: React.FC; frames: number; words: Word[] | null };
 
 export const VIDEOS: VideoEntry[] = [
   { id: "000-bridge", Component: V000, frames: F000, words: W000 as Word[] },
+  { id: "001-accept-test", Component: V001, frames: F001, words: W001 as Word[] },
 ];
