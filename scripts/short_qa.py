@@ -4,7 +4,8 @@
 # Usage: python scripts/short_qa.py <video.mp4> <outdir> [shots.json] [--json qa.json]
 #   shots.json: [{"id":1,"a":0,"b":130}, ...] plus optional {"flash":[130,134], "xfade":[[1131,1137], ...]}
 #   --json: also write the numbers tools/qa_gate.py checks: width, height, fps, frames, audio_sr, lufs, true_peak, counts of
-#   unplanned black / white / pop frames, and the frozen runs as [start, end] (a run still frozen at the last frame counts too)
+#   unplanned black / white / pop frames, and the frozen runs as [first, last] identical frame (inclusive; a run still frozen
+#   at the last frame counts too; runs entirely inside `planned` / `flash` / `xfade` / cut frames are left out)
 import json, math, os, subprocess, sys
 import numpy as np
 from PIL import Image, ImageDraw
@@ -86,11 +87,14 @@ open(os.path.join(out, "report.md"), "w", encoding="utf-8").write("\n".join(R) +
 if json_out:
     fin = lambda x: x if x is not None and math.isfinite(x) else None
     fr = [int(x) for x in v["r_frame_rate"].split("/")]
+    # runs are [first, last] identical frame, both inclusive; the loop above never closes a run that reaches the last
+    # frame, so add it; a run lying entirely inside planned frames (a deliberate still hold in shots.json) is dropped
     tail_run = [(run_start, len(diff))] if run_start is not None and len(diff) - run_start >= 12 else []
+    frozen_unplanned = [(a, b) for a, b in frozen + tail_run if not all(f in planned for f in range(a, b + 1))]
     with open(json_out, "w", encoding="utf-8") as f:
         json.dump({"width": int(v["width"]), "height": int(v["height"]), "fps": fr[0] / fr[1], "frames": n,
                    "audio_sr": int(au[0]["sample_rate"]) if au else None,
                    "lufs": fin(lufs) if au else None, "true_peak": fin(true_peak) if au else None,
                    "black": sum(1 for i in black if i not in planned), "white": len(white), "pops": len(pops),
-                   "frozen": [[int(a), int(b)] for a, b in frozen + tail_run]}, f, indent=1)
+                   "frozen": [[int(a), int(b)] for a, b in frozen_unplanned]}, f, indent=1)
 print("\n".join(R))

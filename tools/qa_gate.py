@@ -4,6 +4,9 @@ Usage: python tools/qa_gate.py qa.json FRAMES
 Prints `pass`, or one fail reason per line and exits 1.
 Planned events (flashes, crossfades, deliberate holds) belong in the video's shots.json `planned` / `flash` / `xfade`,
 never in looser limits here.
+
+Frozen runs come as [start, end] frame numbers, both inclusive: a run is end - start + 1 identical frames,
+and a run longer than 45 frames (1.5 s) fails. short_qa drops runs that lie entirely inside `planned` ranges.
 """
 import json
 import sys
@@ -50,7 +53,7 @@ def verdict(qa, frames):
     if not isinstance(runs, list):
         out.append(f"frozen runs unreadable: {runs!r}")
     else:
-        long_ = [r for r in runs if r[1] - r[0] > FROZEN_MAX_LEN]
+        long_ = [r for r in runs if r[1] - r[0] + 1 > FROZEN_MAX_LEN]
         if len(long_) > MAX_LONG_FROZEN:
             out.append(f"frozen runs longer than {FROZEN_MAX_LEN} frames: {long_[:10]}")
     return out

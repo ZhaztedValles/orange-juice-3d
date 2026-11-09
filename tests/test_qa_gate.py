@@ -24,7 +24,7 @@ def test_good_passes():
 
 
 def test_limits_inclusive():
-    assert qa_gate.verdict(good(lufs=-15.0, true_peak=-1.0, black=3, white=3, pops=2, frozen=[[10, 55]]), FRAMES) == []
+    assert qa_gate.verdict(good(lufs=-15.0, true_peak=-1.0, black=3, white=3, pops=2, frozen=[[10, 54]]), FRAMES) == []
     assert qa_gate.verdict(good(lufs=-13.0), FRAMES) == []
 
 
@@ -81,4 +81,6 @@ def test_pops():
 
 
 def test_frozen():
-    assert fails(good(frozen=[[100, 146]]), "frozen")
+    # [start, end] are frame numbers, both inclusive: [100, 145] is 46 identical frames
+    assert fails(good(frozen=[[100, 145]]), "frozen")
+    assert not fails(good(frozen=[[100, 144]]), "frozen")

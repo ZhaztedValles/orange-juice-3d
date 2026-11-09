@@ -1,10 +1,13 @@
 # Render line: plan picks the next video (or the `video` input), 16 runners each render one frame range of oj-<id>,
-# finish joins the pieces losslessly, builds the mix in Python, muxes, runs short_qa + qa_gate, then queues the short
-# (release `queue`: <id>.mp4 + <id>.yml) or holds it (state/render/<id>.json), and re-dispatches itself for the next one.
+# finish checks and joins the pieces losslessly, builds the mix in Python, muxes, runs short_qa + qa_gate, then queues the
+# short (release `queue`: <id>.mp4 + <id>.yml) or holds it (state/render/<id>.json), and re-dispatches itself for the next
+# one. If a render chunk fails or times out, held-on-render-failure holds the video instead, so the line never wedges.
+# A held video is picked again once its folder's last commit differs from the held render's `source` sha.
 #
 # Security (public repo): the render jobs execute writer-authored Video.tsx, so they get `contents: read` only, no secrets,
 # no persisted git credentials, and they only RESTORE caches (plan, which runs no video code, is the one that saves them).
-# finish holds the write permissions and never runs video code: no Remotion there, only ffmpeg and the repo's Python.
+# finish and held-on-render-failure hold the write permissions and never run video code: no Remotion there, only ffmpeg
+# and the repo's Python; their checkouts do not persist credentials (tools/save_state.sh sets the push credential).
 name: render
 
 on:
@@ -35,6 +38,7 @@ jobs:
       video: ${{ steps.plan.outputs.video }}
       frames: ${{ steps.plan.outputs.frames }}
       template: ${{ steps.plan.outputs.template }}
+      source: ${{ steps.plan.outputs.source }}
       matrix: ${{ steps.plan.outputs.matrix }}
     env:
       GH_TOKEN: ${{ github.token }}
@@ -43,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0              # render_plan compares each folder's last commit with its held time
+          fetch-depth: 0              # render_plan reads each folder's last-commit sha
           persist-credentials: false
 
       - uses: actions/setup-python@v5
@@ -55,7 +59,9 @@ jobs:
       - name: Plan
         id: plan
         run: |
-          if [ -f config.yml ] && python -c "import sys, yaml; sys.exit(0 if (yaml.safe_load(open('config.yml')) or {}).get('paused') is True else 1)"; then
+          # fails closed: a config.yml that does not parse to a mapping fails the job instead of counting as "not paused"
+          paused=$(python -c "import pathlib, yaml; p = pathlib.Path('config.yml'); c = yaml.safe_load(p.read_text(encoding='utf-8')) if p.exists() else {}; c = {} if c is None else c; assert isinstance(c, dict), 'config.yml must be a mapping'; print('true' if c.get('paused') is True else 'false')")
+          if [ "$paused" = "true" ]; then
             echo "::notice::config.yml has paused: true, nothing rendered"
             echo "video=" >> "$GITHUB_OUTPUT"
             exit 0
@@ -66,6 +72,7 @@ jobs:
             echo "video=$(jq -r '.video // ""' <<< "$plan")"
             echo "frames=$(jq -r '.frames' <<< "$plan")"
             echo "template=$(jq -r '.template' <<< "$plan")"
+            echo "source=$(jq -r '.source // ""' <<< "$plan")"
             echo "matrix=$(jq -c '.matrix' <<< "$plan")"
           } >> "$GITHUB_OUTPUT"
 
@@ -157,7 +164,7 @@ jobs:
             | tee render.log | stdbuf -oL tr '\r' '\n' | grep --line-buffered -E "Rendered [0-9]*0/|rror"
           rc=${PIPESTATUS[0]}
           set -e
-          [ "$rc" = 0 ] || { tail -c 4000 render.log; exit "$rc"; }
+          if [ "$rc" != 0 ]; then tail -c 4000 render.log; exit "$rc"; fi
 
       - uses: actions/upload-artifact@v4
         with:
@@ -165,6 +172,41 @@ jobs:
           path: pieces/piece_${{ matrix.idx }}.mp4
           retention-days: 3
           if-no-files-found: error
+
+  # A chunk failed or timed out: hold the video so the next unattended run moves on (no video code runs here)
+  held-on-render-failure:
+    needs: [plan, render]
+    if: always() && needs.plan.outputs.video != '' && needs.render.result == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write     # commit state/render
+      actions: write      # re-dispatch render.yml
+    env:
+      VIDEO: ${{ needs.plan.outputs.video }}
+      SOURCE: ${{ needs.plan.outputs.source }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Hold
+        run: |
+          python3 tools/render_state.py set "$VIDEO" held --source "$SOURCE" --reason "render failed (chunk job failed or timed out)"
+          echo "::error::$VIDEO held: render failed (chunk job failed or timed out)"
+
+      - name: Save render state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash tools/save_state.sh "Render: $VIDEO held"
+
+      - name: Render the next video
+        if: inputs.video == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run render.yml --ref main
 
   finish:
     needs: [plan, render]
@@ -178,11 +220,14 @@ jobs:
       VIDEO: ${{ needs.plan.outputs.video }}
       FRAMES: ${{ needs.plan.outputs.frames }}
       TEMPLATE: ${{ needs.plan.outputs.template }}
+      SOURCE: ${{ needs.plan.outputs.source }}
       QUEUE: ${{ inputs.queue }}
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:
@@ -199,20 +244,21 @@ jobs:
           path: pieces
           merge-multiple: true
 
-      - name: Join losslessly and check the frame count
+      - name: Check the pieces, join losslessly, check the frame count
         id: join
         run: |
-          ls pieces/piece_*.mp4 | sort | sed "s|^|file '$PWD/|; s|$|'|" > list.txt
+          # every planned piece present, nothing else, each an mp4 with one h264 1080x1920 stream of its chunk's frames
+          python tools/render_plan.py --check-pieces pieces --frames "$FRAMES" > list.txt
           cat list.txt
           ffmpeg -v error -y -f concat -safe 0 -i list.txt -c copy -movflags +faststart joined.mp4
           got=$(ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames -of csv=p=0 joined.mp4)
           echo "joined.mp4: $got frames (want $FRAMES)"
-          [ "$got" = "$FRAMES" ] || { echo "::error::joined.mp4 has $got frames, want $FRAMES"; exit 1; }
+          if [ "$got" != "$FRAMES" ]; then echo "::error::joined.mp4 has $got frames, want $FRAMES"; exit 1; fi
 
       - name: Mix
         id: mix
         run: |
-          python audio/build_mix.py "videos/$VIDEO" "out/$VIDEO" 2> mix_err.txt || { cat mix_err.txt; exit 1; }
+          if ! python audio/build_mix.py "videos/$VIDEO" "out/$VIDEO" 2> mix_err.txt; then cat mix_err.txt; exit 1; fi
           cat mix_err.txt
 
       - name: Mux
@@ -223,7 +269,9 @@ jobs:
 
       - name: QA
         id: qa
-        run: python scripts/short_qa.py final.mp4 qa "videos/$VIDEO/shots.json" --json qa.json && cat qa.json
+        run: |
+          python scripts/short_qa.py final.mp4 qa "videos/$VIDEO/shots.json" --json qa.json
+          cat qa.json
 
       - name: Gate
         id: gate
@@ -244,14 +292,21 @@ jobs:
       - name: Decide
         id: decide
         if: always() && steps.join.outcome == 'success'
+        env:
+          GATE: ${{ steps.gate.outputs.result }}
+          MIX: ${{ steps.mix.outcome }}
         run: |
-          if [ "${{ steps.gate.outputs.result }}" = "pass" ]; then
-            if [ "$TEMPLATE" = "true" ]; then echo "::notice::$VIDEO is a template: never queued"; echo "status=passed" >> "$GITHUB_OUTPUT"
-            elif [ "$QUEUE" = "false" ]; then echo "::notice::queue=false: $VIDEO passed but is not queued"; echo "status=passed" >> "$GITHUB_OUTPUT"
-            else echo "status=queued" >> "$GITHUB_OUTPUT"; fi
-          elif [ "${{ steps.gate.outputs.result }}" = "fail" ]; then
+          if [ "$GATE" = "pass" ]; then
+            if [ "$TEMPLATE" = "true" ]; then
+              echo "::notice::$VIDEO is a template: never queued"; echo "status=passed" >> "$GITHUB_OUTPUT"
+            elif [ "$QUEUE" = "false" ]; then
+              echo "::notice::queue=false: $VIDEO passed but is not queued"; echo "status=passed" >> "$GITHUB_OUTPUT"
+            else
+              echo "status=queued" >> "$GITHUB_OUTPUT"
+            fi
+          elif [ "$GATE" = "fail" ]; then
             echo "status=held" >> "$GITHUB_OUTPUT"
-          elif [ "${{ steps.mix.outcome }}" = "failure" ]; then
+          elif [ "$MIX" = "failure" ]; then
             { echo "build_mix failed:"; tail -n 5 mix_err.txt; } > reasons.txt
             echo "status=held" >> "$GITHUB_OUTPUT"
           else
@@ -267,14 +322,16 @@ jobs:
           python tools/render_plan.py --video "$VIDEO" --queue-yml "$VIDEO.yml"
           cat "$VIDEO.yml"
           gh release upload queue "$VIDEO.mp4" "$VIDEO.yml" --clobber
-          python tools/render_plan.py --video "$VIDEO" --set-state queued
+          python tools/render_state.py set "$VIDEO" queued --source "$SOURCE"
 
       - name: Hold
         id: hold
         if: always() && steps.decide.outputs.status == 'held'
         run: |
-          python tools/render_plan.py --video "$VIDEO" --set-state held --reasons reasons.txt
-          while read -r r; do [ -n "$r" ] && echo "::error::$VIDEO held: $r"; done < reasons.txt
+          python tools/render_state.py set "$VIDEO" held --source "$SOURCE" --reasons-file reasons.txt
+          while read -r r; do
+            if [ -n "$r" ]; then echo "::error::$VIDEO held: $r"; fi
+          done < reasons.txt
 
       - uses: actions/upload-artifact@v4
         if: always()
@@ -292,16 +349,7 @@ jobs:
         id: save
         if: always()
         run: |
-          git config user.name "orange-juice-autopilot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A state
-          if git diff --cached --quiet; then echo "Nothing to save"; exit 0; fi
-          git commit -q -m "Render: $VIDEO ${{ steps.decide.outputs.status }}"
-          for i in 1 2 3; do
-            git pull --rebase -q && git push -q && exit 0
-            git rebase --abort 2>/dev/null || true; sleep $((i * 5))
-          done
-          echo "::error::Could not save progress after 3 tries"; exit 1
+          bash tools/save_state.sh "Render: $VIDEO ${{ steps.decide.outputs.status }}"
 
       # only for unattended runs, and only once this video's outcome is saved (queued or held), so the next plan moves on
       - name: Render the next video
