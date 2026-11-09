@@ -5,10 +5,13 @@ import V000, { FRAMES as F000 } from "../videos/000-bridge/Video";
 import W000 from "../videos/000-bridge/words.json";
 import V001, { FRAMES as F001 } from "../videos/001-fern-in-a-jar/Video";
 import W001 from "../videos/001-fern-in-a-jar/words.json";
+import V002, { FRAMES as F002 } from "../videos/002-hotel-on-rails/Video";
+import W002 from "../videos/002-hotel-on-rails/words.json";
 
 export type VideoEntry = { id: string; Component: React.FC; frames: number; words: Word[] | null };
 
 export const VIDEOS: VideoEntry[] = [
   { id: "000-bridge", Component: V000, frames: F000, words: W000 as Word[] },
   { id: "001-fern-in-a-jar", Component: V001, frames: F001, words: W001 as Word[] },
+  { id: "002-hotel-on-rails", Component: V002, frames: F002, words: W002 as Word[] },
 ];

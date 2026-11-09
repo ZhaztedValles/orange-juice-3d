@@ -22,3 +22,14 @@
   reason: ""
   video: 001-fern-in-a-jar
   date: "2026-11-09"
+- id: 002-hotel-on-rails
+  claim: "In spring 1888 the Brighton Beach Hotel on Coney Island, a building of about four thousand tons, was jacked onto railway flatcars and hauled about six hundred feet inland by six locomotives to escape the eroding shore."
+  topics: [brighton-beach-hotel, hotel, locomotives, erosion]
+  sources:
+    - https://americanheritage.com/1888-one-hundred-years-ago-1
+    - https://www.bklynlibrary.org/blog/2019/04/10/brighton-beach-hotel-1888
+  scores: {strange: 4, obscurity: 4, people: 4, visual: 5, provable: 4}
+  status: coded
+  reason: ""
+  video: 002-hotel-on-rails
+  date: "2026-11-10"
