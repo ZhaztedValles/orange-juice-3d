@@ -30,6 +30,7 @@ CEIL_DBTP = -1.2
 MUSIC_BELOW_VOICE_DB = 10.4                              # -15.4 - (-25.8)
 SFX_BELOW_VOICE_DB = 13.7                                # -15.4 - (-29.1), the sum of all events
 DUCK_DB = -3.0
+VOICE_PEAK_DBTP = -2.0                                   # voice alone after the master gain, so the master limiter rests
 
 
 def duck_db(spans, n, depth=DUCK_DB, pre=0.08, post=0.12, att=0.07, rel=0.45):
@@ -81,6 +82,26 @@ def limiter(x, ceil_db=CEIL_DBTP, look=0.003, rel=0.08):
     return x * g3[None, :], g3
 
 
+def tame_voice_peaks(x, ceil_db, look=0.001, rel=0.015):
+    """Kokoro emits 7-20-sample half-cycle spikes at sentence onsets (22 dB above the voice's loudness); this removes
+    them so the master limiter doesn't pump. Transient-only: wherever the 4x-oversampled peak passes ceil_db, the gain
+    dips with a 1 ms raised-cosine look-ahead and returns to exactly 1 over a 15 ms raised-cosine release; everywhere
+    else the voice is untouched (no EQ, no compression, no makeup). x: (2, n). Returns (y, gain)."""
+    n = x.shape[1]
+    up = np.abs(signal.resample_poly(x, 4, 1, axis=-1)).max(0)
+    pk = np.pad(up, (0, max(0, 4 * n - len(up))))[: 4 * n].reshape(n, 4).max(1)
+    need = np.maximum(0.0, 20 * np.log10(np.maximum(pk, 1e-12)) - ceil_db)        # dB of reduction per sample
+    la, lr = max(1, ns(look)), max(1, ns(rel))
+    w = np.concatenate([0.5 - 0.5 * np.cos(np.pi * np.arange(la) / la), [1.0],
+                        0.5 + 0.5 * np.cos(np.pi * np.arange(1, lr + 1) / lr)])    # rises over la, falls over lr
+    red = np.zeros(n)
+    for i in np.flatnonzero(need > 0):
+        a, b = max(0, i - la), min(n, i + lr + 1)
+        np.maximum(red[a:b], need[i] * w[a - (i - la): b - (i - la)], out=red[a:b])
+    g = dbg(-red)
+    return x * g[None, :], g
+
+
 def load_voice(path, n):
     """voice.wav -> (2, n) at 48 kHz: mono, resampled, padded with silence or trimmed"""
     x, sr = sf.read(str(path), always_2d=True, dtype="float64")
@@ -122,26 +143,37 @@ def _gain_to(x, target):
     return x * dbg(target - lv) if np.isfinite(lv) else x
 
 
-def build(folder, outdir):
+def build(folder, outdir, diag=None):
+    """diag: optional dict, filled with intermediate signals for analysis"""
     folder, outdir = Path(folder), Path(outdir)
     n = int(round(spec.frames(folder) / spec.FPS * SR))
     a = spec.load(folder)
     words = json.loads((folder / "words.json").read_text(encoding="utf-8"))
 
     voice = load_voice(folder / "voice.wav", n)
-    lv = integrated(voice)
-    if not np.isfinite(lv):
+    lv0 = integrated(voice)
+    if not np.isfinite(lv0):
         raise ValueError(f"{folder}/voice.wav is silent")
 
-    music = score.render(a["music"], a["key"], a["bpm"], n / SR, video_seed(folder)).T
-    music = _gain_to(music, lv - MUSIC_BELOW_VOICE_DB)
-    music = music * dbg(duck_db([(w["s"], w["e"]) for w in words], n))[None, :]
-
-    sfx = np.zeros((2, n))
+    music_raw = score.render(a["music"], a["key"], a["bpm"], n / SR, video_seed(folder)).T
+    duck = dbg(duck_db([(w["s"], w["e"]) for w in words], n))[None, :]
+    sfx_raw = np.zeros((2, n))
     for i, e in enumerate(a.get("sfx", [])):
         t, y = sfx_event(i, e)
-        place(sfx, y, t)
-    sfx = _gain_to(sfx, lv - SFX_BELOW_VOICE_DB)
+        place(sfx_raw, y, t)
+
+    def beds(lv):
+        return _gain_to(music_raw, lv - MUSIC_BELOW_VOICE_DB) * duck, _gain_to(sfx_raw, lv - SFX_BELOW_VOICE_DB)
+
+    # voice peak ceiling: after the master gain (-14 LUFS for the whole sum) the voice alone peaks at VOICE_PEAK_DBTP
+    # (taming lowers lv a little, which moves the beds and the master gain: settle it in a few passes)
+    voice_raw, lv = voice, lv0
+    music, sfx = beds(lv)
+    for _ in range(3):
+        master_db = TARGET_LUFS - integrated(voice + music + sfx)
+        voice, vgain = tame_voice_peaks(voice_raw, VOICE_PEAK_DBTP - master_db)
+        lv = integrated(voice)                           # the mix law is measured on the tamed voice
+        music, sfx = beds(lv)
 
     pre = voice + music + sfx
     g = dbg(TARGET_LUFS - integrated(pre))
@@ -152,6 +184,9 @@ def build(folder, outdir):
             break
         g *= dbg(TARGET_LUFS - lufs)
 
+    if diag is not None:
+        diag.update(voice_raw=voice_raw, voice_gain=vgain, voice=voice, music=music, sfx=sfx, master_gain=g,
+                    master_limiter_gain=_gr)
     outdir.mkdir(parents=True, exist_ok=True)
     write_wav(str(outdir / "mix.wav"), mix)
     for name, x in (("voice", voice), ("music", music), ("sfx", sfx)):   # float: before the limiter they may pass 0 dBFS

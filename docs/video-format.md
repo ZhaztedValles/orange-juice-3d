@@ -65,10 +65,13 @@ with a crescendo, `mystery` tremolo vibes + low pad (sparse), `sad` slow music b
 starts on its own downbeat and fades out over 0.25 s past its end (the crossfade); the score goes through a small
 room (rt60 0.6 s).
 
-Mix: with the voice's integrated loudness `Lv`, music is set to `Lv - 10.4` LUFS integrated and ducked -3 dB
+Mix: first `tame_voice_peaks` removes the voice's transient peaks (Kokoro emits half-cycle spikes at sentence
+onsets): wherever its 4x-oversampled peak passes a ceiling, the gain dips with a 1 ms look-ahead and returns to 1 over
+15 ms; the ceiling is set so that after the master gain the voice alone peaks at -2 dBTP. Nothing else touches the
+voice. Then, with the tamed voice's integrated loudness `Lv`, music is set to `Lv - 10.4` LUFS integrated and ducked -3 dB
 while words are spoken (0.08 s before to 0.12 s after each word), SFX are summed and set to `Lv - 13.7`; these are
 the bridge's stem balance (voice -15.4, music -25.8, sfx -29.1 LUFS; `MUSIC_BELOW_VOICE_DB`, `SFX_BELOW_VOICE_DB` in
-`audio/build_mix.py`). The voice is untouched. One master gain brings the sum to -14.0 LUFS integrated, then a true-peak
+`audio/build_mix.py`). The voice gets no EQ or compression. One master gain brings the sum to -14.0 LUFS integrated, then a true-peak
 limiter (ceiling -1.2 dBTP) keeps it at or below -1 dBTP.
 
 ## Engine modules

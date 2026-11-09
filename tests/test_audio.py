@@ -58,3 +58,21 @@ def test_every_mood_renders(tmp_path):
         assert y.shape == (4 * 48000, 2)
         if mood != "none":
             assert np.abs(y).max() > 1e-3
+
+
+def test_tame_voice_peaks_only_touches_the_spikes():
+    sr = dsp.SR
+    t = np.arange(3 * sr) / sr
+    v = 0.1 * np.sin(2 * np.pi * 180 * t) * ((t % 0.5) < 0.35)
+    spikes = (0.7, 1.52, 2.31)
+    for s in spikes:  # Kokoro-like onset spike: one 10-sample half-cycle
+        k = int(s * sr)
+        v[k:k + 10] += 0.8 * np.sin(np.pi * np.arange(10) / 10)
+    x = dsp.st(v)
+    y, g = build_mix.tame_voice_peaks(x, -12.0)
+    assert dsp.true_peak(y) <= -12.0 + 0.1
+    outside = np.ones(len(v), bool)
+    for s in spikes:
+        outside[int((s - 0.02) * sr): int((s + 0.02) * sr)] = False
+    res = ((y - x)[:, outside] ** 2).sum() / (x[:, outside] ** 2).sum()
+    assert 10 * np.log10(res + 1e-30) < -60
