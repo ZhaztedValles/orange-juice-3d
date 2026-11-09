@@ -64,7 +64,7 @@ def pace_problems(folder):
 def test_pace_too_slow(folder):
     retime(folder, 1.1)      # the template runs at 3.41 w/s; slowed it is about 3.1
     (p,) = pace_problems(folder)
-    assert p.endswith("w/s, aim for about 3.7") and "3.1" in p
+    assert "w/s, aim for about 3.4" in p and "3.1" in p
 
 
 def test_pace_too_fast(folder):
@@ -119,3 +119,44 @@ def test_video_check_problems_pass_through(folder, capsys):
 def test_unreadable_ledger_is_a_problem(folder, tmp_path):
     (tmp_path / "stories" / "ledger.yml").write_text("a: b\n", encoding="utf-8")
     assert any(p.startswith("stories:") for p in writer_check.check(folder))
+
+
+def test_template_true_outside_the_bridge_is_rejected(folder):
+    meta = yaml.safe_load((folder / "meta.yml").read_text(encoding="utf-8"))
+    meta["template"] = True
+    (folder / "meta.yml").write_text(yaml.safe_dump(meta), encoding="utf-8")
+    (p,) = [p for p in writer_check.check(folder) if "template" in p]
+    assert "000-bridge" in p and "remove the `template` key" in p and "sources" in p
+
+
+def test_the_bridge_itself_may_keep_template_true(tmp_path):
+    v = tmp_path / "videos" / "000-bridge"
+    shutil.copytree(ROOT / "videos" / "000-bridge", v)
+    (tmp_path / "stories").mkdir()
+    (tmp_path / "stories" / "ledger.yml").write_text("[]\n", encoding="utf-8")
+    assert not any("template" in p for p in writer_check.check(v))
+
+
+def _other(vid, claim, topics):
+    return {**entry(vid), "claim": claim, "topics": topics}
+
+
+def test_entry_repeating_another_entry_is_reported(folder, tmp_path):
+    other = _other("002-other", "A strange true thing happened.", ["strange"])
+    (tmp_path / "stories" / "ledger.yml").write_text(yaml.safe_dump([other, entry(VID)]), encoding="utf-8")
+    (p,) = [p for p in writer_check.check(folder) if "same story" in p]
+    assert VID in p and "002-other" in p
+
+
+def test_entry_matching_the_banned_list_is_reported(folder, tmp_path):
+    (tmp_path / "stories" / "banned.yml").write_text(
+        yaml.safe_dump([{"claim": "A strange true thing happened.", "keywords": ["strange"]}]), encoding="utf-8")
+    assert any(p.startswith(f"ledger entry '{VID}': banned:") for p in writer_check.check(folder))
+
+
+def test_unrelated_entries_and_banned_are_fine(folder, tmp_path):
+    other = _other("002-other", "A sailor in Oslo painted a whale", ["oslo", "whale"])
+    (tmp_path / "stories" / "ledger.yml").write_text(yaml.safe_dump([other, entry(VID)]), encoding="utf-8")
+    (tmp_path / "stories" / "banned.yml").write_text(
+        yaml.safe_dump([{"claim": "A cat painted a ship", "keywords": ["cat", "ship"]}]), encoding="utf-8")
+    assert writer_check.check(folder) == []

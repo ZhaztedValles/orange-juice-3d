@@ -1,5 +1,6 @@
 import json
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +33,22 @@ def test_held_attempts_decide_fix_or_drop():
         {"id": "001-a-story", "reasons": ["too long"], "attempts": 1, "action": "fix"},
         {"id": "002-b-story", "reasons": ["bad", "worse"], "attempts": 2, "action": "drop"},
     ]
+
+
+def test_held_video_stuck_at_one_attempt_is_dropped_after_three_days():
+    now = datetime(2026, 11, 9, 1, 0, tzinfo=timezone.utc)
+
+    def held(updated, attempts=1):
+        st = {"status": "held", "reasons": ["r"], "attempts": attempts}
+        if updated is not None:
+            st["updated"] = updated if isinstance(updated, str) else updated.isoformat(timespec="seconds")
+        return today.plan(False, [], {"001-a-story": st}, set(), ["000-bridge", "001-a-story"], [], now=now)["held"][0]["action"]
+    assert held(now - timedelta(days=3, minutes=1)) == "drop"
+    assert held(now - timedelta(days=3)) == "fix"           # exactly 3 days is not more than 3 days
+    assert held(now - timedelta(hours=5)) == "fix"
+    assert held(None) == "fix"                              # no time recorded: not stale
+    assert held("not a time") == "fix"
+    assert held(now - timedelta(days=10), attempts=2) == "drop"
 
 
 def test_next_id_skips_existing_including_template():

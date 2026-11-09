@@ -2,7 +2,9 @@
 
 Usage: python tools/writer_check.py videos/<id>
 Prints `ready <id>` (exit 0), or the problems, one per line (exit 1). Checks, in order: video_check.problems, the story
-ledger (every video except the template 000-bridge needs one coded entry), the narration pace, and the required "You see," pivot (case-sensitive, comma included).
+ledger (every video except the template 000-bridge needs one coded entry, and that entry must not repeat another entry or
+a banned story), no `template: true` outside 000-bridge, the narration pace, and the required "You see," pivot
+(case-sensitive, comma included).
 """
 import json
 import sys
@@ -14,7 +16,7 @@ import ledger  # noqa: E402
 import script_md  # noqa: E402
 import video_check  # noqa: E402
 
-MIN_WPS, MAX_WPS, AIM_WPS = 3.3, 4.1, 3.7
+MIN_WPS, MAX_WPS, AIM_WPS = 3.3, 4.1, 3.4     # the fixed voice (SPEED 1.2) reads about 3.4 w/s
 PIVOT = "You see,"
 
 
@@ -26,6 +28,18 @@ def words_per_second(words) -> float:
     return len(words) / span if span > 0 else 0.0
 
 
+def repeat_problems(vid, entries, banned):
+    """the video's own coded ledger entry checked against every other entry and the banned list (what Accept does)"""
+    own = [i for i, e in enumerate(entries)
+           if isinstance(e, dict) and e.get("video") == vid and e.get("status") == "coded"]
+    if len(own) != 1 or not isinstance(entries[own[0]].get("claim"), str):
+        return []       # ledger.video_problems reports a missing or duplicate entry
+    e = entries[own[0]]
+    topics = e.get("topics") if isinstance(e.get("topics"), list) else []
+    others = [o for i, o in enumerate(entries) if i != own[0]]
+    return [f"ledger entry {e.get('id')!r}: {r}" for r in ledger.check(e["claim"], topics, others, banned)]
+
+
 def check(folder, root=None):
     """every problem the writer must fix before pushing `folder` (empty list when it is ready).
     The story files are read from `root`: by default the repository that holds the folder (videos/<id> -> two levels
@@ -34,18 +48,19 @@ def check(folder, root=None):
     if root is None:
         root = folder.parent.parent if (folder.parent.parent / "stories").is_dir() else ROOT
     vid = folder.name
-    out = list(video_check.problems(folder))
+    out = list(video_check.problems(folder)) + video_check.template_problems(folder)
     if vid != ledger.TEMPLATE:
         try:
-            entries, _ = ledger.load(root)
+            entries, banned = ledger.load(root)
             out += ledger.video_problems(vid, entries)
+            out += repeat_problems(vid, entries, banned)
         except ValueError as e:
             out.append(f"stories: {e}")
     try:
         words = json.loads((folder / "words.json").read_text(encoding="utf-8"))
         wps = words_per_second(words)
         if not (MIN_WPS <= wps <= MAX_WPS):
-            out.append(f"narration pace {wps:.2f} w/s, aim for about {AIM_WPS}")
+            out.append(f"narration pace {wps:.2f} w/s, aim for about {AIM_WPS}; the fixed voice reads 205-230 words in 55-68 s")
     except (OSError, ValueError, TypeError, KeyError, IndexError):
         pass    # a missing or malformed words.json is already reported by video_check
     try:

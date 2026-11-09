@@ -61,6 +61,16 @@ def test_held_ignores_first_attempt_and_non_held():
     assert titles(9, ["19:00"], FRESH, held, NOW) == []
 
 
+def test_held_id_without_a_folder_is_not_an_alert():
+    """a dropped video: its folder is gone but state/render keeps saying held"""
+    held = {"001-gone": {"status": "held", "attempts": 3, "reasons": ["x"]},
+            "002-here": {"status": "held", "attempts": 2, "reasons": ["y"]}}
+    body = dict(status.alerts(9, ["19:00"], FRESH, held, NOW, {"000-bridge", "002-here"}))[HELD]
+    assert "002-here" in body and "001-gone" not in body
+    assert titles(9, ["19:00"], FRESH, {"001-gone": held["001-gone"]}, NOW, {"000-bridge"}) == []
+    assert HELD in titles(9, ["19:00"], FRESH, {"001-gone": held["001-gone"]}, NOW)     # no folder list: no filter
+
+
 def test_all_clear_and_all_raised():
     assert status.alerts(9, ["19:00"], FRESH, {}, NOW) == []
     held = {"001-a": {"status": "held", "attempts": 2, "reasons": ["r"]}}

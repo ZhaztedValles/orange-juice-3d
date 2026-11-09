@@ -32,9 +32,11 @@ HELD_ATTEMPTS = 2
 ACCEPT_PREFIX = "Accept claude/oj-"
 
 
-def alerts(queue_count, slots, last_accept, held, now):
+def alerts(queue_count, slots, last_accept, held, now, folders=None):
     """[(title, body)] for every alert that applies. Pure: no I/O.
-    held = {id: render state}; last_accept = datetime of the newest accept commit, or None when there never was one."""
+    held = {id: render state}; last_accept = datetime of the newest accept commit, or None when there never was one.
+    folders = the ids of the video folders on main: a held id with no folder was dropped, so it is not an alert (None
+    skips that filter)."""
     out = []
     need = 2 * len(slots)
     if queue_count < need:
@@ -48,7 +50,8 @@ def alerts(queue_count, slots, last_accept, held, now):
                               "The nightly writer may have stopped, or its branches are being rejected "
                               "(see the \"writer branch rejected\" issue)."))
     stuck = {v: s for v, s in sorted(held.items())
-             if s.get("status") == "held" and s.get("attempts", 0) >= HELD_ATTEMPTS}
+             if s.get("status") == "held" and s.get("attempts", 0) >= HELD_ATTEMPTS
+             and (folders is None or v in folders)}
     if stuck:
         lines = ["These videos failed the render checks and are on hold (a hold ends when the video folder is "
                  "committed again):", ""]
@@ -123,8 +126,10 @@ def main():
     from store import get_store
     cfg = common.load_config()
     count = queued_count(get_store().names())
+    videos = ROOT / "videos"
+    folders = {d.name for d in videos.iterdir() if d.is_dir()} if videos.is_dir() else set()
     raised = alerts(count, cfg["slots"], git_newest_accept(), render_state.load(ROOT / "state"),
-                    datetime.now(timezone.utc))
+                    datetime.now(timezone.utc), folders)
     common.summary(f"Queue status\nqueued: {count}\nalerts: {', '.join(t for t, _ in raised) or 'none'}")
     if a.alert:
         sync_issues(raised)

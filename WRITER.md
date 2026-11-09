@@ -82,7 +82,9 @@ mention it in your summary.
      shots.json, audio.json, narration...). A held video re-renders when its folder is committed again;
    - run section 8 (self-check) on it until `python tools/writer_check.py videos/<id>` prints `ready <id>`;
    - commit it: `git add videos/<id> && git commit -m "Fix <id>: <what you changed>"`.
-3. For each held video with action `drop`:
+3. For each held video with action `drop` (today.py also says `drop` for a held video whose render state is more
+   than 3 days old even with fewer than 2 attempts: a fix that is never committed never re-renders, so it would stay
+   stuck at 1 attempt forever):
    - delete the folder from the branch: `git rm -r -q videos/<id>`;
    - in `stories/ledger.yml`, on that video's entry, set the ledger status to `dropped` with the reason
      (`reason: "held after 2 render attempts: <reasons>"`) and clear `video` (`video: ""`). Change no other field;
@@ -145,7 +147,8 @@ mention it in your summary.
      knows. `tools/writer_check.py` reports a problem when "You see," is missing. The sentence after "You see," is our
      own: never the bridge's ("every bridge has a rhythm") or its swing analogy.
    - **Ironic payoff:** the consequence, and a last line that twists or calls back to the hook.
-3. About 3.7 words/s, 55-70 s: 195-225 words. Numbers as words ("eighteen thirty-one", "seventy-four"); no digits in
+3. At the fixed voice speed (SPEED 1.2) Kokoro reads about 3.4 words/s. Aim for 205-230 words in the narration, so the
+   voice lands at 55-68 s (writer_check accepts 3.3-4.1 words/s and a 55-70 s video). Numbers as words ("eighteen thirty-one", "seventy-four"); no digits in
    the narration. Use commas and full stops; avoid em-dashes, ellipses and brackets (they break the word count).
 4. Never describe on screen what the viewer already sees. Narration adds what the picture cannot show.
 5. `SCRIPT.md` layout follows `docs/video-format.md`: facts and sources at the top, then the narration markers:
@@ -157,7 +160,8 @@ mention it in your summary.
    <one sentence per line>
    <!-- /narration -->
    ```
-6. `meta.yml` (delete the copied `template: true` line; it must not be there):
+6. `meta.yml` (after copying, delete the `template: true` line from meta.yml: `writer_check.py` and Accept reject
+   `template: true` in every folder except `000-bridge`; write the real title, description, tags and sources):
    ```yaml
    title: "<= 100 characters: a curiosity hook that tells the truth"
    description: |
@@ -199,7 +203,9 @@ Everything follows `docs/video-format.md`: read its "Folder contract", "Import s
 modules" sections before you write code.
 
 1. **Source folder.** Copy the latest good video: the highest-numbered folder in `videos/` that is not held in
-   `state/render/` (it is in the queue or already posted), or `000-bridge` when there is none.
+   `state/render/` (it is in the queue or already posted), or `000-bridge` when there is none. After copying, delete
+   `template: true` from the copy's `meta.yml` and add the real meta (title, description, tags, sources) at once;
+   `writer_check.py` and Accept reject the flag outside `000-bridge`.
 2. **Replace the story-specific files.** Keep the look (the engine and the post chain in `Video.tsx`); replace the story:
    - `story.ts`: `TOTAL`, the story physics, `SHOTS` (id, a/b frames, light `day`/`golden`), `XFADE` (crossfades at place
      or time changes), `FLASH_AT` (white flash after the hook), `CAMS` (per-shot camera keys), `KICKS` (impact shakes),
@@ -316,7 +322,8 @@ The look lives in these values; the story lives in story.ts / the world layout /
    empty frames. Then render the changed frames again and repeat.
 5. Stop polishing at the 3-hour budget (check the elapsed time).
 6. Then run `python tools/writer_check.py videos/<id>`. It must print `ready <id>`. It runs the folder contract, the
-   ledger entry, the pace (3.3-4.1 words/s) and the required "You see," pivot. Fix and re-run until it does.
+   ledger entry, the repeat/banned check on the video's own ledger entry, no `template: true`, the pace (3.3-4.1 words/s; the fixed voice
+   gives about 3.4) and the required "You see," pivot. Fix and re-run until it does.
 7. `npx vitest run` must pass (Accept runs it on the merged tree).
 
 ## 9. Push
@@ -328,8 +335,12 @@ The look lives in these values; the story lives in story.ts / the world layout /
    git commit -m "Video <id>: <title>"
    git status --short          # must print nothing
    ```
-2. Rebase on main (**never merge** main), re-check, push:
+2. Rebase on main (**never merge** main), re-check, push. Do this on every night that pushes anything, including one
+   with no new video (a held-video fix runs section 8 and leaves `src/videos.generated.ts` modified): restore the
+   registry first, and rebase only when `git status --short` prints nothing:
    ```bash
+   git checkout -- src/videos.generated.ts
+   git status --short          # must print nothing
    git fetch origin && git rebase origin/main
    python tools/accept_check.py origin/main HEAD      # must print "accepted: ..."
    git push -u origin HEAD
@@ -343,7 +354,8 @@ The look lives in these values; the story lives in story.ts / the world layout /
    delete its folder (`rm -rf videos/<id>`) and its new ledger entry (it was never on main), keep any new
    `stories/banned.yml` entries, and commit what remains. Committed held-video fixes, drops and `stories/banned.yml`
    additions are pushed even when no new video passed (commit the banned additions with
-   `git add stories/banned.yml && git commit -m "Banned: <n> common stories"`). Push nothing only when the branch has
+   `git add stories/banned.yml && git commit -m "Banned: <n> common stories"`); run the registry restore and the
+   clean `git status --short` check of step 2 before the rebase on those nights too. Push nothing only when the branch has
    no commits at all (`git log --oneline origin/main..HEAD` prints nothing); then finish with a one-paragraph summary
    of why.
 4. After the push, Accept (on GitHub) re-checks the branch, merges it into main and starts the render. You do nothing

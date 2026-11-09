@@ -1,5 +1,8 @@
+import shutil
 import subprocess
 import sys
+
+import yaml
 
 from tools import ledger
 
@@ -128,8 +131,16 @@ def test_banned_list_blocks_its_own_stories():
         assert ledger.banned_hit(b["claim"], banned), b["claim"]
 
 
-def test_cli():
-    cli = [sys.executable, str(ledger.ROOT / "tools" / "ledger.py")]
+def test_cli(tmp_path):
+    """the CLI against a synthetic repo (its own copy of ledger.py and its own story files), so that real ledger or
+    banned entries added later cannot change the outcome"""
+    (tmp_path / "tools").mkdir()
+    shutil.copy(ledger.ROOT / "tools" / "ledger.py", tmp_path / "tools" / "ledger.py")
+    (tmp_path / "stories").mkdir()
+    (tmp_path / "stories" / "ledger.yml").write_text(yaml.safe_dump([GOOD]), encoding="utf-8")
+    (tmp_path / "stories" / "banned.yml").write_text(yaml.safe_dump(
+        [{"claim": "The Great Molasses Flood hit Boston", "keywords": ["molasses", "boston"]}]), encoding="utf-8")
+    cli = [sys.executable, str(tmp_path / "tools" / "ledger.py")]
     r = subprocess.run(cli + ["validate"], capture_output=True, text=True)
     assert (r.returncode, r.stdout.strip()) == (0, "ok"), r.stdout + r.stderr
     r = subprocess.run(cli + ["check", "A baker in Lisbon invented a clock", "--topics", "lisbon,clock"],
@@ -138,6 +149,8 @@ def test_cli():
     r = subprocess.run(cli + ["check", "The Great Molasses Flood hit Boston", "--topics", "molasses"],
                        capture_output=True, text=True)
     assert r.returncode == 1 and r.stdout.startswith("banned:")
+    r = subprocess.run(cli + ["check", GOOD["claim"], "--topics", "broughton,bridge"], capture_output=True, text=True)
+    assert r.returncode == 1 and GOOD["id"] in r.stdout
 
 
 # --- the story rules a branch's change must keep (append-only ledger, banned list only grows, no repeats) ---

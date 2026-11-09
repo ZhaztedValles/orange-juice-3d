@@ -7,7 +7,9 @@ Usage:
       video_check.problems, and the story ledger (ledger.problems on stories/ledger.yml and banned.yml when either is changed;
       ledger.change_problems against main's copies (append-only ledger, banned list only grows, new entries not
       repeats or banned) when either is changed or a non-template video is touched;
-      ledger.video_problems: every touched video other than 000-bridge needs exactly one coded ledger entry). Prints `accepted: ...` (exit 0) or the problems (exit 1).
+      ledger.video_problems: every touched video other than 000-bridge needs exactly one coded ledger entry). A touched
+      folder that no longer exists (a dropped video) is skipped by those checks and by --videos-out, and must be a held
+      video on main whose ledger entry is dropped in the diff. Prints `accepted: ...` (exit 0) or the problems (exit 1).
       --videos-out writes "<id> <FRAMES>" per touched video folder, for the smoke stills.
   python tools/accept_check.py --branch REF
       exit 0 when REF is a writer branch name (claude/oj-<[A-Za-z0-9._-]+>), 1 otherwise.
@@ -33,7 +35,8 @@ directory, and what is "on main" (folders, render state, posted markers) from <b
 Path rules: the writer may add or modify only
   videos/<NNN-slug>/<file>.(ts|tsx|json|md|yml|wav)   (no subfolders), in a folder that is new or held, and
   stories/ledger.yml, stories/banned.yml;
-deletes only inside a new or held folder; the template 000-bridge never; a new folder's number must be greater than
+deletes only inside a new or held folder (a held folder may be deleted completely when its ledger entry becomes
+`dropped` in the same diff: nothing is then checked or rendered for it); `template: true` only in the template; the template 000-bridge never; a new folder's number must be greater than
 every number on main (templates included); a held folder is changeable only while it has not been posted.
 """
 import json
@@ -220,10 +223,12 @@ def load_failures(state_dir):
     return out
 
 
-def held_ids(render_states, posted):
-    """ids whose render state on main is held and that were never posted: the only existing folders the writer may change"""
+def held_ids(render_states, posted, existing=None):
+    """ids whose render state on main is held and that were never posted: the only existing folders the writer may change.
+    With `existing` (the video folders on main), an id whose folder is gone (a dropped video) is not held any more."""
     return {vid for vid, st in render_states.items()
-            if isinstance(st, dict) and st.get("status") == "held" and vid not in posted}
+            if isinstance(st, dict) and st.get("status") == "held" and vid not in posted
+            and (existing is None or vid in existing)}
 
 
 def touched_videos(changed):
@@ -338,7 +343,7 @@ def main_facts(base, repo):
             except ValueError:
                 states[name[:-5]] = None        # unreadable state: not held, so not changeable (fail closed)
     posted = {n[:-5] for n in _ls(base, "state/posted", repo, dirs=False) if n.endswith(".json")}
-    return existing, held_ids(states, posted)
+    return existing, held_ids(states, posted, existing)
 
 
 def _base_list(base, path, repo, ledger):
@@ -372,6 +377,29 @@ def story_problems(base, repo, changed, vids, ledger):
         return list(dict.fromkeys(errs))
     except Exception as e:  # noqa: BLE001 - a content rejection, never a traceback
         return [f"stories: cannot check the story files ({' '.join(str(e).split()) or type(e).__name__})"]
+
+
+def drop_problems(base, repo, gone, held, ledger):
+    """the video folders the branch deleted completely (`gone`): each must be a held video on main whose ledger entry
+    is `dropped` in the merged tree. Never raises."""
+    if not gone:
+        return []
+    try:
+        base_entries = _base_list(base, "stories/ledger.yml", repo, ledger)
+        entries, _ = ledger.load(repo)
+        status = {e.get("id"): e.get("status") for e in entries if isinstance(e, dict)}
+        errs = []
+        for vid in gone:
+            ids = [e.get("id") for e in base_entries
+                   if isinstance(e, dict) and e.get("video") == vid and e.get("status") == "coded"]
+            dropped = bool(ids) and all(status.get(i) == "dropped" for i in ids)
+            if vid not in held or not dropped:
+                errs.append(f"videos/{vid}: only a held video whose ledger entry is dropped may be deleted "
+                            f"(held on main: {'yes' if vid in held else 'no'}; ledger entry dropped in this diff: "
+                            f"{'yes' if dropped else 'no'})")
+        return errs
+    except Exception as e:  # noqa: BLE001 - a content rejection, never a traceback
+        return [f"stories: cannot check the dropped videos ({' '.join(str(e).split()) or type(e).__name__})"]
 
 
 def main(argv):
@@ -424,11 +452,16 @@ def main(argv):
         import ledger
         import video_check
         from audio import spec
-        for vid in vids:
+        # a folder the branch deleted completely (a dropped video) has nothing to check or render
+        alive = [v for v in vids if (repo / "videos" / v).is_dir()]
+        gone = [v for v in vids if v not in alive]
+        for vid in alive:
             errs += [f"videos/{vid}: {p}" for p in video_check.problems(repo / "videos" / vid)]
-        errs += story_problems(base, repo, changed, vids, ledger)
+            errs += [f"videos/{vid}: {p}" for p in video_check.template_problems(repo / "videos" / vid)]
+        errs += drop_problems(base, repo, gone, held, ledger)
+        errs += story_problems(base, repo, changed, alive, ledger)
         if videos_out and not errs:
-            Path(videos_out).write_text("".join(f"{v} {spec.frames(repo / 'videos' / v)}\n" for v in vids),
+            Path(videos_out).write_text("".join(f"{v} {spec.frames(repo / 'videos' / v)}\n" for v in alive),
                                         encoding="utf-8")
     print("\n".join(errs) if errs else f"accepted: {len(changed)} changed file(s), video folder(s): "
           f"{' '.join(vids) or 'none'}")

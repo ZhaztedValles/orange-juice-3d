@@ -8,6 +8,7 @@ import argparse
 import json
 import re
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,6 +20,7 @@ import status  # noqa: E402
 import video_check  # noqa: E402
 
 FIX_ATTEMPTS = 2          # a held video with this many failed attempts is dropped, not fixed again
+STALE_AFTER = timedelta(days=3)    # a held video not re-rendered for this long is dropped even with fewer attempts
 NUMBER_RE = re.compile(r"(\d{3})-")
 
 
@@ -26,12 +28,26 @@ def _numbers(ids):
     return [int(m.group(1)) for i in ids if isinstance(i, str) and (m := NUMBER_RE.match(i))]
 
 
-def plan(paused, queue_ids, render_state: dict, posted: set, video_ids: list, entries, templates=()) -> dict:
+def _stale(st, now):
+    """True when the state's `updated` is more than STALE_AFTER before `now` (an unreadable or missing time is not stale)"""
+    try:
+        when = datetime.fromisoformat(str(st["updated"]))
+    except (KeyError, ValueError):
+        return False
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    return now - when > STALE_AFTER
+
+
+def plan(paused, queue_ids, render_state: dict, posted: set, video_ids: list, entries, templates=(), now=None) -> dict:
     """tonight's plan. Pure: no I/O.
     render_state = {id: state}; templates = ids of template folders (meta.yml `template: true`; `000-bridge` always
     is one): they are never listed as held and never counted as queued. A held id with no folder in video_ids is not
     listed (it was dropped already). next_id is one above the highest number among the video folders and the ledger's
-    '<NNN>-<slug>' ids (so a dropped story's number is not reused), at least 001."""
+    '<NNN>-<slug>' ids (so a dropped story's number is not reused), at least 001. A held video is fixed while it has
+    fewer than FIX_ATTEMPTS attempts and its state's `updated` is at most STALE_AFTER old (`now`, default the current
+    time); otherwise it is dropped (a fix left uncommitted never re-renders, so its attempts would never grow)."""
+    now = now or datetime.now(timezone.utc)
     skip = set(templates) | {ledger.TEMPLATE}
     queue_ids = [v for v in queue_ids if v not in skip]
     folders = set(video_ids)
@@ -41,7 +57,7 @@ def plan(paused, queue_ids, render_state: dict, posted: set, video_ids: list, en
             continue    # a held id whose folder is gone was already dropped: never drop it again
         attempts = int(st.get("attempts", 0))
         held.append({"id": vid, "reasons": list(st.get("reasons", [])), "attempts": attempts,
-                     "action": "fix" if attempts < FIX_ATTEMPTS else "drop"})
+                     "action": "drop" if attempts >= FIX_ATTEMPTS or _stale(st, now) else "fix"})
     ledger_ids = [e.get("id") for e in entries if isinstance(e, dict)]
     top = max(_numbers(list(video_ids) + ledger_ids), default=0)
     return {"paused": bool(paused), "queue_count": len(queue_ids), "held": held,

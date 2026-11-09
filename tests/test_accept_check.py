@@ -158,8 +158,11 @@ def test_cli_on_a_repo(tmp_path):
     _git(repo, "config", "user.email", "t@example.com")
     _git(repo, "config", "user.name", "t")
     shutil.copytree(ROOT / "videos" / "000-bridge", repo / "videos" / "000-bridge")
+    meta = ('title: "A story"\ndescription: "A story."\ntags: []\n'
+            'sources: [https://example.org/a, https://example.com/b]\n')      # a real video: no `template: true`
     for vid in ("001-queued-one", "002-held-one"):
         shutil.copytree(ROOT / "videos" / "000-bridge", repo / "videos" / vid)
+        (repo / "videos" / vid / "meta.yml").write_text(meta, encoding="utf-8")
     (repo / "state" / "render").mkdir(parents=True)
     (repo / "state" / "render" / "001-queued-one.json").write_text('{"status": "queued"}')
     (repo / "state" / "render" / "002-held-one.json").write_text('{"status": "held"}')
@@ -170,6 +173,7 @@ def test_cli_on_a_repo(tmp_path):
     _git(repo, "commit", "-q", "-m", "main")
     _git(repo, "checkout", "-q", "-b", "claude/oj-x")
     shutil.copytree(ROOT / "videos" / "000-bridge", repo / "videos" / "003-new-one")
+    (repo / "videos" / "003-new-one" / "meta.yml").write_text(meta, encoding="utf-8")
     (repo / "stories" / "ledger.yml").write_text(
         _story("002-held-one", "A sailor in Oslo painted a whale", "oslo, whale")
         + _story("003-new-one", "A baker in Lisbon invented a clock", "lisbon, clock"), encoding="utf-8")
@@ -651,3 +655,104 @@ def test_only_the_bridge_is_exempt_from_the_ledger_not_any_template(tmp_path):
     assert r.returncode == 1 and "001-new-one" in r.stdout and "ledger" in r.stdout, r.stdout + r.stderr
     # while the real template id stays exempt
     assert accept_check.TEMPLATE == "000-bridge"
+
+
+# --- a night that drops a held video: the folder is deleted, its entry becomes dropped, a new video is added ---
+
+REAL_META = ('title: "A story"\ndescription: "A story."\ntags: []\n'
+             'sources: [https://example.org/a, https://example.com/b]\n')
+
+
+def _drop_repo(tmp_path, delete="001-held-one", drop=True, delete_files_only=False):
+    """main: the template, a held 001-held-one and a queued 002-queued-one (each with a coded entry, state/render).
+    The branch deletes videos/<delete>, marks that entry dropped when `drop`, and adds the coded 003-new-one."""
+    import shutil
+    repo = tmp_path / "r"
+    repo.mkdir(parents=True)
+    _git(repo, "init", "-q", "-b", "main")
+    _git(repo, "config", "user.email", "t@example.com")
+    _git(repo, "config", "user.name", "t")
+    shutil.copytree(ROOT / "videos" / "000-bridge", repo / "videos" / "000-bridge")
+    for vid in ("001-held-one", "002-queued-one"):
+        shutil.copytree(ROOT / "videos" / "000-bridge", repo / "videos" / vid)
+        (repo / "videos" / vid / "meta.yml").write_text(REAL_META, encoding="utf-8")
+    (repo / "state" / "render").mkdir(parents=True)
+    (repo / "state" / "render" / "001-held-one.json").write_text('{"status": "held", "attempts": 2}')
+    (repo / "state" / "render" / "002-queued-one.json").write_text('{"status": "queued"}')
+    held = _story("001-held-one", "A sailor in Oslo painted a whale", "oslo, whale")
+    queued = _story("002-queued-one", "A monk in Kyoto tuned a bell", "kyoto, bell")
+    (repo / "stories").mkdir()
+    (repo / "stories" / "ledger.yml").write_text(held + queued, encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "main")
+    _git(repo, "checkout", "-q", "-b", "claude/oj-x")
+    _git(repo, "rm", "-r", "-q", f"videos/{delete}")
+    shutil.copytree(ROOT / "videos" / "000-bridge", repo / "videos" / "003-new-one")
+    (repo / "videos" / "003-new-one" / "meta.yml").write_text(REAL_META, encoding="utf-8")
+    dropped = lambda e: e.replace("status: coded", "status: dropped").replace(
+        '  reason: ""', '  reason: "failed the render twice"').replace(
+        f"  video: {delete}", '  video: ""')
+    if drop:
+        held, queued = (dropped(held), queued) if delete == "001-held-one" else (held, dropped(queued))
+    (repo / "stories" / "ledger.yml").write_text(held + queued + _story(
+        "003-new-one", "A baker in Lisbon invented a clock", "lisbon, clock"), encoding="utf-8")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "branch")
+    return repo, [sys.executable, str(ROOT / "tools" / "accept_check.py"), "main", "HEAD"]
+
+
+def test_dropping_a_held_video_is_accepted(tmp_path):
+    repo, cli = _drop_repo(tmp_path)
+    out = tmp_path / "v.txt"
+    r = _run(repo, cli + ["--videos-out", str(out)])
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert r.stdout.startswith("accepted") and "001-held-one" in r.stdout and "003-new-one" in r.stdout
+    assert out.read_text().split() == ["003-new-one", "2025"]       # nothing to render for the dropped folder
+    assert _run(repo, cli[:-2] + ["--paths-only", "main", "HEAD"]).returncode == 0
+
+
+def test_deleting_a_held_video_without_dropping_its_entry_is_rejected(tmp_path):
+    repo, cli = _drop_repo(tmp_path, drop=False)
+    r = _run(repo, cli)
+    assert r.returncode == 1 and "videos/001-held-one: only a held video whose ledger entry is dropped may be deleted" \
+        in r.stdout, r.stdout + r.stderr
+
+
+def test_deleting_a_video_that_is_not_held_is_rejected(tmp_path):
+    for drop in (True, False):
+        repo, cli = _drop_repo(tmp_path / str(drop), delete="002-queued-one", drop=drop)
+        r = _run(repo, cli)
+        assert r.returncode == 1 and "videos/002-queued-one: only a held video" in r.stdout, r.stdout + r.stderr
+
+
+def test_deleting_the_template_is_rejected(tmp_path):
+    repo, cli = _drop_repo(tmp_path)
+    _git(repo, "rm", "-r", "-q", "videos/000-bridge")
+    _git(repo, "commit", "-q", "-m", "more")
+    r = _run(repo, cli)
+    assert r.returncode == 1 and "000-bridge" in r.stdout
+
+
+def test_held_ids_ignores_ids_whose_folder_is_gone():
+    states = {"001-gone": {"status": "held"}, "002-here": {"status": "held"}}
+    assert accept_check.held_ids(states, posted=set(), existing={"000-bridge", "002-here"}) == {"002-here"}
+    assert accept_check.held_ids(states, posted=set()) == {"001-gone", "002-here"}
+
+
+# --- `template: true` belongs to 000-bridge alone ---
+
+def test_copy_that_keeps_template_true_is_rejected(tmp_path):
+    repo, cli = _ledger_repo(tmp_path, LEDGER_ENTRY)
+    meta = repo / "videos" / "001-new-one" / "meta.yml"
+    meta.write_text(meta.read_text(encoding="utf-8") + "template: true\n", encoding="utf-8")
+    _git(repo, "commit", "-qam", "keep the flag")
+    r = _run(repo, cli)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "videos/001-new-one" in r.stdout and "template" in r.stdout and "sources" in r.stdout
+
+
+def test_straight_copy_of_the_bridge_is_rejected(tmp_path):
+    """the review's repro: a verbatim copy (template: true kept) with a valid ledger entry"""
+    repo, cli = _ledger_repo(tmp_path, LEDGER_ENTRY, template=True)
+    r = _run(repo, cli)
+    assert r.returncode == 1 and "template: true" in r.stdout, r.stdout + r.stderr
