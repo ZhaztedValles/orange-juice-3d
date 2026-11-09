@@ -12,9 +12,9 @@ on:
         description: "Chromium GL backend: swangle | angle | swiftshader | egl | vulkan"
         default: "swangle"
         required: true
-      scale:
-        description: "Output scale (1 = 1080x1920, 0.6667 = 720x1280)"
-        default: "1"
+      res:
+        description: "Output height: 1920 (1080x1920) or 1280 (720x1280; also lowers the WebGL buffer via post.dpr)"
+        default: "1920"
         required: true
       concurrency:
         description: "Remotion --concurrency (empty = Remotion default)"
@@ -31,7 +31,7 @@ jobs:
     env:
       GL: ${{ inputs.gl }}
       FRAMES: ${{ inputs.frames }}
-      SCALE: ${{ inputs.scale }}
+      RES: ${{ inputs.res }}
       CONC: ${{ inputs.concurrency }}
       TMPDIR: ${{ github.workspace }}/../remotion-tmp
     steps:
@@ -72,10 +72,13 @@ jobs:
         run: |
           first=${FRAMES%-*}; last=${FRAMES#*-}; n=$((last - first + 1))
           extra=""; [ -n "$CONC" ] && extra="--concurrency=$CONC"
+          # --scale alone does not shrink the WebGL buffer (R3F clamps dpr >= 1), so 720p also passes post.dpr.
+          # The scale must make 1080*s and 1920*s exact integers in floating point, hence 2/3 written out.
+          if [ "$RES" = "1280" ]; then SCALE=0.6666666666666666; props='{"post":{"dpr":0.6666666666666666}}'; else SCALE=1; props='{}'; fi
           start=$(date +%s.%N)
           rc=0
           npx remotion render src/index.ts BridgeShort out/spike/segment.mp4 \
-            --frames="$FRAMES" --gl="$GL" --scale="$SCALE" --codec=h264 --crf=16 \
+            --frames="$FRAMES" --gl="$GL" --scale="$SCALE" --props="$props" --codec=h264 --crf=16 \
             --timeout=240000 $extra --log=verbose > render.log 2>&1 || rc=$?
           end=$(date +%s.%N)
           tr '\r' '\n' < render.log | grep -vE "colormap|^\s*$" | grep -iE "Rendered [0-9]*0/|Encoded [0-9]+/[0-9]+$|error|concurrency|gl|renderer" | tail -n 80 || true
@@ -84,7 +87,7 @@ jobs:
           fps=$(echo "scale=3; $n / $wall" | bc)
           min65=$(echo "scale=1; 1950 / $fps / 60" | bc)
           echo "frames=$n wall=${wall}s fps=$fps est_65s_minutes=$min65" | tee timing.txt
-          echo "### spike-render: gl=$GL scale=$SCALE frames=$FRAMES conc=${CONC:-default}" >> "$GITHUB_STEP_SUMMARY"
+          echo "### spike-render: gl=$GL res=$RES frames=$FRAMES conc=${CONC:-default}" >> "$GITHUB_STEP_SUMMARY"
           echo "frames=$n, wall=${wall}s, **fps=$fps**, est. 65 s video = **${min65} min**" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Still
@@ -98,7 +101,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: spike-${{ inputs.gl }}-${{ inputs.scale }}-${{ github.run_id }}
+          name: spike-${{ inputs.gl }}-${{ inputs.res }}-${{ github.run_id }}
           path: |
             out/spike/
             timing.txt
