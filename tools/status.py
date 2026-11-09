@@ -59,9 +59,13 @@ def alerts(queue_count, slots, last_accept, held, now):
     return out
 
 
+def queued_ids(names):
+    """ids of the queued videos: one per .mp4 asset (its .yml rides along; cleanup deletes both after posting)"""
+    return [n[:-len(".mp4")] for n in names if n.endswith(".mp4")]
+
+
 def queued_count(names):
-    """a queued video is one .mp4 asset (its .yml rides along; cleanup deletes both after posting)"""
-    return sum(1 for n in names if n.endswith(".mp4"))
+    return len(queued_ids(names))
 
 
 def newest_accept(log):
