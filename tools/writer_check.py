@@ -7,6 +7,7 @@ a banned story), no `template: true` outside 000-bridge, the narration pace, and
 (case-sensitive, comma included).
 """
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -68,7 +69,28 @@ def check(folder, root=None):
             out.append(f'narration needs the "{PIVOT}" pivot before the everyday analogy')
     except (OSError, ValueError):
         pass    # a missing or malformed SCRIPT.md is already reported by video_check
+    out += cut_problems(folder)
     return out
+
+
+CUT_RE = re.compile(r"\{\s*f:\s*(\d+)\s*,\s*cut:\s*true")
+
+
+def cut_problems(folder):
+    """Every hard camera cut inside a shot (`{ f: N, cut: true, ... }` in a .ts file) is a deliberate jump; the render's
+    QA counts any unlisted jump as a "pop" and holds the video. Each cut frame must be covered by shots.json `planned`."""
+    folder = Path(folder)
+    try:
+        planned = json.loads((folder / "shots.json").read_text(encoding="utf-8")).get("planned", [])
+        covered = {f for a, b in planned for f in range(int(a), int(b) + 1)}
+    except (OSError, ValueError, TypeError, AttributeError):
+        return []   # video_check reports a malformed shots.json
+    cuts = sorted({int(m) for ts in folder.glob("*.ts*") for m in CUT_RE.findall(ts.read_text(encoding="utf-8"))})
+    missing = [f for f in cuts if f not in covered]
+    if not missing:
+        return []
+    return [f"shots.json: camera cut frames {missing} are not in \"planned\"; add [N, N] for each "
+            f"(the render QA holds the video for unplanned pops)"]
 
 
 def main(argv):

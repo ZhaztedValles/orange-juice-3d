@@ -227,8 +227,9 @@ modules" sections before you write code.
    - `Video.tsx`: `FRAMES` written once as a literal, `export const FRAMES = <int>;`, equal to `TOTAL`; rename the
      component and its `delayRender` label; nothing else changes unless the story needs it;
    - `shots.json`: the same shots as `SHOTS` (contiguous from 0 to `FRAMES`, each >= 30 frames), `xfade` as
-     `[a - x/2, a + x/2]` per crossfade, `flash` as `[FLASH_AT, FLASH_AT + 4]`, `planned` for deliberate holds and
-     impact kicks;
+     `[a - x/2, a + x/2]` per crossfade, `flash` as `[FLASH_AT, FLASH_AT + 4]`, `planned` for deliberate holds,
+     impact kicks and **every in-shot camera cut** (`[N, N]` for each `{ f: N, cut: true }` key in `CAMS`; an unlisted
+     cut counts as a "pop" and the render holds the video; `tools/writer_check.py` checks this);
    - `audio.json`: moods only from `hook playful march warm tension mystery sad none`, covering 0 to `FRAMES / 30`;
      SFX kinds only from the list in `docs/video-format.md` (with `dur` exactly for the kinds marked dur).
 3. `FRAMES` is 1650-2100 and at least the voice length; about voice seconds + 2, times 30 (bridge: 65.5 s voice,

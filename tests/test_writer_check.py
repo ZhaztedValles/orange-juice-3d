@@ -160,3 +160,18 @@ def test_unrelated_entries_and_banned_are_fine(folder, tmp_path):
     (tmp_path / "stories" / "banned.yml").write_text(
         yaml.safe_dump([{"claim": "A cat painted a ship", "keywords": ["cat", "ship"]}]), encoding="utf-8")
     assert writer_check.check(folder) == []
+
+
+def test_camera_cuts_must_be_planned(tmp_path):
+    import json
+    from tools import writer_check
+    d = tmp_path / "v"
+    d.mkdir()
+    (d / "story.ts").write_text("const CAMS = { 2: [{ f: 164, s: A }, { f: 228, cut: true, s: B }], 3: [{f:383,cut:true,s:C}] };",
+                                encoding="utf-8")
+    (d / "shots.json").write_text(json.dumps({"shots": [{"id": 1, "a": 0, "b": 400}], "planned": [[228, 228]]}), encoding="utf-8")
+    p = writer_check.cut_problems(d)
+    assert len(p) == 1 and "[383]" in p[0]
+    (d / "shots.json").write_text(json.dumps({"shots": [{"id": 1, "a": 0, "b": 400}], "planned": [[228, 228], [380, 390]]}),
+                                  encoding="utf-8")
+    assert writer_check.cut_problems(d) == []
