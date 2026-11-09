@@ -20,6 +20,7 @@ import soundfile as sf  # noqa: E402
 import yaml  # noqa: E402
 
 from audio import spec  # noqa: E402
+from ledger import TEMPLATE  # noqa: E402
 from script_md import narration  # noqa: E402
 
 FPS = 30
@@ -93,6 +94,16 @@ def is_template(folder):
     """True when meta.yml says `template: true` (never queued or posted; exempt from the 55 s minimum and from sources)"""
     meta, err = _load_meta(Path(folder))
     return err is None and meta.get("template") is True
+
+
+def template_problems(folder):
+    """a `template: true` meta.yml is allowed only in the engine template folder (ledger.TEMPLATE, 000-bridge): a
+    writer's copy that keeps the flag would skip the length and sources rules and never render"""
+    folder = Path(folder).resolve()
+    if folder.name != TEMPLATE and is_template(folder):
+        return ["meta.yml: `template: true` is only for the engine template 000-bridge; remove the `template` key and "
+                "add the real meta (title, description, tags, sources)"]
+    return []
 
 
 def _num(x):
