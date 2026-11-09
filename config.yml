@@ -3,7 +3,7 @@
 # must list a time inside every slot's window (a test checks this when you change `slots`).
 paused: false
 timezone: Asia/Manila
-slots: ["19:00"]            # one post per slot; later ["12:00", "19:00"]
+slots: ["01:00", "19:00"]   # 01:00 = temporary owner test slot (2026-11-10); one post per slot
 slot_window_minutes: 90     # a run within 90 min after a slot may post for that slot
 require_approval: false     # owner decision 2026-11-09: no review; queued videos post automatically (set true + list ids in state/approved.yml to gate posting)
 youtube:
