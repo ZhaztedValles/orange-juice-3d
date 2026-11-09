@@ -1,7 +1,7 @@
-# Accept: the gate for the nightly writer's branches (claude/oj-<date>). Ported from FactPop's accept-routine.yml, but
+# Accept: the gate for the nightly writer's branches (claude/<name>). Ported from FactPop's accept-routine.yml, but
 # run from main's copy of this file (schedule / workflow_dispatch), never from a pushed branch's.
 #
-# find (contents: read, issues: write) - lists origin's claude/oj-* branches (git ls-remote), fetches
+# find (contents: read, issues: write) - lists origin's claude/* writer branches (not claude/smoke-*) (git ls-remote), fetches
 #   them and picks the oldest by commit date (one per run; the next run takes the next). Tripwire: a branch whose diff
 #   vs main OR any of whose commits touches .github/ is never processed; an issue "Orange Juice: writer branch touched
 #   workflows" names it and its paths. A branch rejected for its content at its current sha (state/accept/<slug>.json)
@@ -44,7 +44,7 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        description: "Writer branch to accept (claude/oj-...); empty = the oldest one. Names a parked branch to retry it."
+        description: "Writer branch to accept (claude/...); empty = the oldest one. Names a parked branch to retry it."
         default: ""
         required: false
 
@@ -84,7 +84,7 @@ jobs:
         run: |
           only=()
           if [ -n "$ONLY" ]; then
-            if [[ ! "$ONLY" =~ ^claude/oj-[A-Za-z0-9._-]+$ ]]; then echo "::error::not a writer branch name"; exit 1; fi
+            if [[ ! "$ONLY" =~ ^claude/[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then echo "::error::not a writer branch name"; exit 1; fi
             only=(--only "$ONLY")
           fi
           res=$(python3 tools/accept_check.py --find "${only[@]}" --tripwire-out "$RUNNER_TEMP/tripwire.md")
@@ -94,7 +94,7 @@ jobs:
           slug=$(jq -r '.slug' <<< "$res")
           attempt=$(jq -r '.attempt' <<< "$res")
           if [ -n "$branch" ]; then
-            if [[ ! "$branch" =~ ^claude/oj-[A-Za-z0-9._-]+$ || ! "$sha" =~ ^[0-9a-f]{40}$ || "claude/$slug" != "$branch" ||
+            if [[ ! "$branch" =~ ^claude/[A-Za-z0-9][A-Za-z0-9._-]*$ || ! "$sha" =~ ^[0-9a-f]{40}$ || "claude/$slug" != "$branch" ||
                   ! "$attempt" =~ ^[0-9]+$ ]]; then
               echo "::error::unexpected find result"; exit 1
             fi
@@ -147,7 +147,7 @@ jobs:
       - name: Trusted copy of main (the checker runs from here, never from the branch); fetch the branch
         id: base
         run: |
-          if [[ ! "$BRANCH" =~ ^claude/oj-[A-Za-z0-9._-]+$ || ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then exit 1; fi
+          if [[ ! "$BRANCH" =~ ^claude/[A-Za-z0-9][A-Za-z0-9._-]*$ || ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then exit 1; fi
           sha=$(git rev-parse HEAD)
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           git worktree add -q --detach "$RUNNER_TEMP/trusted" "$sha"
@@ -328,7 +328,7 @@ jobs:
       - name: Main moved only in state/ since the check
         id: base
         run: |
-          if [[ ! "$BRANCH" =~ ^claude/oj-[A-Za-z0-9._-]+$ || "claude/$SLUG" != "$BRANCH" || ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+          if [[ ! "$BRANCH" =~ ^claude/[A-Za-z0-9][A-Za-z0-9._-]*$ || "claude/$SLUG" != "$BRANCH" || ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
             exit 1
           fi
           sha=$(git rev-parse HEAD)

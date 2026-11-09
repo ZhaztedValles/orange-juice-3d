@@ -122,7 +122,7 @@ def test_touched_videos():
 
 
 @pytest.mark.parametrize("ref,ok", [("claude/oj-2026-11-09", True), ("claude/oj-test-accept", True),
-                                    ("claude/oj-", False), ("claude/routine-x", False), ("main", False),
+                                    ("claude/oj-", True), ("claude/eager-curie-d7lvld", True), ("claude/smoke-2026-11-09", False), ("claude/", False), ("claude/-x", False), ("main", False),
                                     ("claude/oj-a b", False), ("claude/oj-$(id)", False), ("claude/oj-x;rm", False),
                                     ("claude/oj-x/y", False), ("claude/oj-x\n", False)])
 def test_branch_name(ref, ok):

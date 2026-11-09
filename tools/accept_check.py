@@ -1,4 +1,4 @@
-"""Server-side gate for the writer's branches (claude/oj-<date>), run by .github/workflows/accept.yml.
+"""Server-side gate for the writer's branches (claude/<name>: the routine's session branch), run by .github/workflows/accept.yml.
 
 Usage:
   python tools/accept_check.py [--paths-only] [--videos-out FILE] <base> <head>
@@ -12,7 +12,7 @@ Usage:
       video on main whose ledger entry is dropped in the diff. Prints `accepted: ...` (exit 0) or the problems (exit 1).
       --videos-out writes "<id> <FRAMES>" per touched video folder, for the smoke stills.
   python tools/accept_check.py --branch REF
-      exit 0 when REF is a writer branch name (claude/oj-<[A-Za-z0-9._-]+>), 1 otherwise.
+      exit 0 when REF is a writer branch name (claude/<[A-Za-z0-9._-]+>, not claude/smoke-*), 1 otherwise.
   python tools/accept_check.py --find [--only BRANCH] [--tripwire-out FILE]
       lists origin's writer branches (git ls-remote), fetches each, and prints JSON
       {"branch", "sha", "slug", "tripped": [{"branch", "sha", "paths"}]}: the oldest (commit date) branch to accept,
@@ -52,7 +52,7 @@ from ledger import TEMPLATE  # noqa: E402  (imported from the trusted CODE_ROOT 
 VIDEO_PATH_RE = re.compile(r"videos/(\d{3}-[a-z0-9-]{3,50})/[\w.-]+\.(?:ts|tsx|json|md|yml|wav)", re.ASCII)
 VIDEO_DIR_RE = re.compile(r"videos/([^/]+)/", re.ASCII)
 STORIES_RE = re.compile(r"stories/(?:ledger|banned)\.yml", re.ASCII)
-BRANCH_RE = re.compile(r"claude/oj-[A-Za-z0-9._-]+", re.ASCII)
+BRANCH_RE = re.compile(r"claude/(?!smoke-)[A-Za-z0-9][A-Za-z0-9._-]*", re.ASCII)  # the routine pushes its session branch (e.g. claude/eager-curie-d7lvld); claude/smoke-* are smoke tests
 NO_HISTORY = "no common history with main"
 STATUSES = ("A", "M", "D")
 WORKFLOW_RE = re.compile(r"\.github(?:/|$)", re.ASCII | re.IGNORECASE)
@@ -405,7 +405,7 @@ def drop_problems(base, repo, gone, held, ledger):
 def main(argv):
     if argv[:1] == ["--branch"] and len(argv) == 2:
         ok = branch_ok(argv[1])
-        print("ok" if ok else f"not a writer branch name: {argv[1]!r} (want claude/oj-[A-Za-z0-9._-]+)")
+        print("ok" if ok else f"not a writer branch name: {argv[1]!r} (want claude/<name>, not claude/smoke-*)")
         return 0 if ok else 1
     if argv[:1] == ["--record-failure"] and len(argv) in (3, 4):
         print(json.dumps(record_failure(_repo() / "state", argv[1], argv[2], argv[3] if len(argv) == 4 else "")))

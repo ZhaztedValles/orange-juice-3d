@@ -22,7 +22,8 @@ cloud session. Nobody will answer questions, so follow these steps in order, lit
    posted). Accept rejects any other path.
 4. **Voice, mix and captions are approved by the owner. Do not change them.** The voice is Kokoro `am_michael` at
    SPEED 1.2 through `tools/voice.py`; the engine adds one-word captions by itself.
-5. **Branch.** One branch per night, `claude/oj-<YYYY-MM-DD>` (Manila date). Rebase it on `origin/main`; **never merge**
+5. **Branch.** One branch per night: the `claude/...` branch this session was started on (the cloud session can only
+   push that one, e.g. `claude/eager-curie-d7lvld`; Accept picks up any `claude/` branch). Rebase it on `origin/main`; **never merge**
    main into it. Never push to `main`, never push any other branch, never touch `.github`.
 6. **Posting.** You never post, render the final video, start a workflow, or approve anything. GitHub renders your
    branch after Accept merges it (about 31 minutes per video); the owner approves posts.
@@ -55,11 +56,12 @@ python -m pip install torch==2.15.0 --index-url https://download.pytorch.org/whl
 python -m pip install -r requirements-voice.txt     # Kokoro voice
 command -v espeak-ng || sudo apt-get install -y -q espeak-ng   # Kokoro fallback for unknown words
 export REMOTION_TMP=/tmp/remotion-tmp GL=swangle
-git fetch origin && git checkout -b claude/oj-$(cat /tmp/oj-date) origin/main
+git branch --show-current > /tmp/oj-branch     # the session branch, claude/...; it must start with claude/ and not claude/smoke-
+git fetch origin && git checkout -B "$(cat /tmp/oj-branch)" origin/main
 ```
 
-3. If `git ls-remote --heads origin claude/oj-$(cat /tmp/oj-date)` shows the branch already exists (an earlier run
-   today), use `claude/oj-<date>-2` (then `-3`, ...) instead: `git checkout -b claude/oj-$(cat /tmp/oj-date)-2 origin/main`.
+3. If `/tmp/oj-branch` does not start with `claude/` (or starts with `claude/smoke-`), stop and finish with "the session
+   branch is not a claude/ branch"; push nothing. Never create another branch name: only the session branch can be pushed.
    If an install command fails, retry it once; if it fails again, stop and report the error. Push nothing.
    A `getaddrinfo ENOTFOUND` / "could not resolve" error means the routine's network access is not **Full**: stop and
    finish with "The routine needs Full network access (remotion.media, kenney.nl, huggingface.co)". Push nothing.

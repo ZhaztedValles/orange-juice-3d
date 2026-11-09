@@ -3,7 +3,7 @@
 Alerts (fixed issue titles; the open issue is updated, a new one is created when there is none, and it is closed with
 a short comment when the condition clears):
   "Orange Juice: queue low"      queued videos < 2 x number of slots in config.yml
-  "Orange Juice: writer silent"  no commit "Accept claude/oj-..." on main in the last 36 h (never before the first one)
+  "Orange Juice: writer silent"  no commit "Accept claude/..." on main in the last 36 h (never before the first one)
   "Orange Juice: videos held"    a video is held with attempts >= 2 (ids and reasons are listed)
 
 Usage: python tools/status.py [--alert]
@@ -29,7 +29,7 @@ T_HELD = "Orange Juice: videos held"
 TITLES = (T_LOW, T_SILENT, T_HELD)
 SILENT_AFTER = timedelta(hours=36)
 HELD_ATTEMPTS = 2
-ACCEPT_PREFIX = "Accept claude/oj-"
+ACCEPT_PREFIX = "Accept claude/"
 
 
 def alerts(queue_count, slots, last_accept, held, now, folders=None):
@@ -72,7 +72,7 @@ def queued_count(names):
 
 
 def newest_accept(log):
-    """newest commit time from `git log --format=%cI<TAB>%s` text, for subjects starting with 'Accept claude/oj-'"""
+    """newest commit time from `git log --format=%cI<TAB>%s` text, for subjects starting with 'Accept claude/'"""
     times = []
     for line in log.splitlines():
         when, _, subject = line.partition("\t")

@@ -4,7 +4,7 @@ ROOT = Path(__file__).resolve().parent.parent
 def test_writer_md_mentions_every_tool_and_rule():
     w = (ROOT / "WRITER.md").read_text(encoding="utf-8")
     for s in ("tools/today.py", "tools/ledger.py check", "tools/voice.py", "tools/writer_check.py",
-              "scripts/stills.mjs", "scripts/sbs_sheet.py", "claude/oj-", "orange-juice-refs", "/tmp/oj-sheets",
+              "scripts/stills.mjs", "scripts/sbs_sheet.py", "git branch --show-current", "orange-juice-refs", "/tmp/oj-sheets",
               "You see,", "0-3 frames", "2 independent", "3 hours", "git rebase origin/main", "never merge",
               ".github", "src/engine", "stories/ledger.yml", "stories/banned.yml", "docs/video-format.md",
               "Readability traps", "paused"):

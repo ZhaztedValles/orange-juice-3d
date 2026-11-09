@@ -41,7 +41,7 @@ Before the first real night, run the one-off smoke test: set the prompt to
 1. The routine follows `WRITER.md`. It checks `paused`, fixes or drops held videos, picks one strange true story,
    fact-checks it on 2 independent sources, writes the script, makes the voice, and codes a new folder `videos/<NNN-slug>/`.
    It checks its own stills against the private references, and its last self-check is `tools/writer_check.py`.
-2. It pushes one branch named `claude/oj-<date>`.
+2. It pushes its session branch (`claude/<name>`, e.g. `claude/eager-curie-d7lvld`); Accept picks up any `claude/` branch except `claude/smoke-*`.
 3. GitHub's **Accept** workflow re-checks everything with main's trusted copy of the tools (path rules, the folder
    contract, the story ledger, tsc, tests, a smoke still). It then merges the branch into `main` and starts **Render**.
 4. Render builds the video (about 31 minutes) into the `queue` release. While `require_approval: true`, a video posts
