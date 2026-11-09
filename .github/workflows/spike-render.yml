@@ -1,0 +1,106 @@
+name: spike-render
+
+# Milestone 1 speed spike: render a frame range of BridgeShort on a CPU-only ubuntu runner and time it.
+on:
+  workflow_dispatch:
+    inputs:
+      frames:
+        description: "Frame range (Remotion --frames)"
+        default: "0-299"
+        required: true
+      gl:
+        description: "Chromium GL backend: swangle | angle | swiftshader | egl | vulkan"
+        default: "swangle"
+        required: true
+      scale:
+        description: "Output scale (1 = 1080x1920, 0.6667 = 720x1280)"
+        default: "1"
+        required: true
+      concurrency:
+        description: "Remotion --concurrency (empty = Remotion default)"
+        default: ""
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      GL: ${{ inputs.gl }}
+      FRAMES: ${{ inputs.frames }}
+      SCALE: ${{ inputs.scale }}
+      CONC: ${{ inputs.concurrency }}
+      TMPDIR: ${{ github.workspace }}/../remotion-tmp
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Runner info
+        run: |
+          nproc; free -h; df -h .; node -v; npm -v
+          mkdir -p "$TMPDIR"
+
+      - run: npm ci
+
+      - name: Chrome headless shell and its libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libnss3 libdbus-1-3 libatk1.0-0 libgbm-dev libasound2t64 libxrandr2 libxkbcommon-dev             libxfixes3 libxcomposite1 libxdamage1 libatk-bridge2.0-0 libpango-1.0-0 libcairo2 libcups2 > /dev/null
+          npx remotion browser ensure
+
+      - name: Restore Kenney models
+        id: kenney
+        uses: actions/cache@v4
+        with:
+          path: public/bridge/kenney
+          key: kenney-${{ hashFiles('scripts/fetch-kenney.mjs') }}
+
+      - name: Fetch Kenney models (CC0)
+        run: node scripts/fetch-kenney.mjs
+
+      - run: npx tsc --noEmit
+
+      - name: Render frames
+        id: render
+        run: |
+          first=${FRAMES%-*}; last=${FRAMES#*-}; n=$((last - first + 1))
+          extra=""; [ -n "$CONC" ] && extra="--concurrency=$CONC"
+          start=$(date +%s.%N)
+          rc=0
+          npx remotion render src/index.ts BridgeShort out/spike/segment.mp4 \
+            --frames="$FRAMES" --gl="$GL" --scale="$SCALE" --codec=h264 --crf=16 \
+            --timeout=240000 $extra --log=verbose > render.log 2>&1 || rc=$?
+          end=$(date +%s.%N)
+          tr '\r' '\n' < render.log | grep -vE "colormap|^\s*$" | grep -iE "Rendered [0-9]*0/|Encoded [0-9]+/[0-9]+$|error|concurrency|gl|renderer" | tail -n 80 || true
+          if [ "$rc" != 0 ]; then tr '\r' '\n' < render.log | tail -n 60; echo "render failed rc=$rc"; exit "$rc"; fi
+          wall=$(echo "$end - $start" | bc)
+          fps=$(echo "scale=3; $n / $wall" | bc)
+          min65=$(echo "scale=1; 1950 / $fps / 60" | bc)
+          echo "frames=$n wall=${wall}s fps=$fps est_65s_minutes=$min65" | tee timing.txt
+          echo "### spike-render: gl=$GL scale=$SCALE frames=$FRAMES conc=${CONC:-default}" >> "$GITHUB_STEP_SUMMARY"
+          echo "frames=$n, wall=${wall}s, **fps=$fps**, est. 65 s video = **${min65} min**" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Still
+        if: always()
+        run: |
+          mid=$(( (${FRAMES%-*} + ${FRAMES#*-}) / 2 ))
+          start=$(date +%s)
+          REMOTION_TMP="$TMPDIR" node scripts/bridge-stills.mjs out/spike/ci_${GL}_ "$mid,200" 0.5 2>&1 | grep -E "^(bundle|still)|rror" || true
+          echo "stills took $(( $(date +%s) - start ))s (incl. bundle)" | tee -a timing.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: spike-${{ inputs.gl }}-${{ inputs.scale }}-${{ github.run_id }}
+          path: |
+            out/spike/
+            timing.txt
+            render.log
+          if-no-files-found: warn
