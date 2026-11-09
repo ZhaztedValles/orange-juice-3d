@@ -19,6 +19,7 @@ Each video lives in its own folder `videos/<NNN-slug>/` (see `docs/video-format.
    silent, or videos are held (`python tools/status.py`).
 
 Owner setup for the YouTube channel: [`docs/CHANNEL-SETUP.md`](docs/CHANNEL-SETUP.md).
+The nightly writer follows [`WRITER.md`](WRITER.md); its routine settings are in [`docs/WRITER-SETUP.md`](docs/WRITER-SETUP.md).
 
 ## Setup
 ```sh
