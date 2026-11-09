@@ -11,10 +11,10 @@ this channel reuses it, so nothing new needs creating there.
 
 ### Step 2 - Get the refresh token for Orange Juice Productions
 
-1. Open **developers.google.com/oauthplayground**.
+1. Open a **private/incognito window** (so Google does not sign you in as the FactPop account), then go to **developers.google.com/oauthplayground**.
 2. Click the **gear** → tick **Use your own OAuth credentials** → paste the Client ID and Client secret → close the panel.
 3. In **Input your own scopes**, paste `https://www.googleapis.com/auth/youtube` and click **Authorize APIs**.
-4. Sign in. When Google asks which account or channel to use, **choose Orange Juice Productions**, not FactPop.
+4. Sign in with the **Gmail account that owns Orange Juice Productions** (it can be a different Gmail from FactPop: the app is In production, so any account can use it). When Google asks which channel to use, **choose Orange Juice Productions**, not FactPop.
 5. When you see "Google hasn't verified this app", click **Advanced → Go to FactPop Autopilot (unsafe)** → **Continue**. It's your own app.
 6. Click **Exchange authorization code for tokens**. Copy the **Refresh token**. This is the new `YT_REFRESH_TOKEN`.
 

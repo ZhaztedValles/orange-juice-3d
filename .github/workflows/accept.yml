@@ -1,7 +1,7 @@
 # Accept: the gate for the nightly writer's branches (claude/oj-<date>). Ported from FactPop's accept-routine.yml, but
 # run from main's copy of this file (schedule / workflow_dispatch), never from a pushed branch's.
 #
-# find (contents: read, issues: write, actions: read) - lists origin's claude/oj-* branches (git ls-remote), fetches
+# find (contents: read, issues: write) - lists origin's claude/oj-* branches (git ls-remote), fetches
 #   them and picks the oldest by commit date (one per run; the next run takes the next). Tripwire: a branch whose diff
 #   vs main OR any of whose commits touches .github/ is never processed; an issue "Orange Juice: writer branch touched
 #   workflows" names it and its paths. A branch rejected for its content at its current sha (state/accept/<slug>.json)

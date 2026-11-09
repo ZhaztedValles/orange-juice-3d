@@ -689,3 +689,12 @@ def test_workflow_cleans_up_only_after_a_successful_save():
     assert "dry_run != true" in clean["if"] and "dry_run != true" in save["if"]
     assert clean["run"].strip() == "python autopilot/publish.py cleanup"
     assert "KNOWN RESIDUAL" in WORKFLOW.read_text(encoding="utf-8")
+
+
+def test_secret_and_write_jobs_never_restore_a_cache():
+    # Writer code can plant cache entries on main; a job holding secrets or a write token must not restore one.
+    from pathlib import Path
+    for wf in ("post.yml", "queue-report.yml"):
+        text = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / wf).read_text(encoding="utf-8")
+        assert "cache:" not in text.replace("# No cache", ""), wf
+        assert "actions/cache" not in text, wf
