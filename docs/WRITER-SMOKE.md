@@ -21,7 +21,8 @@ with the next step; always finish with steps 7 and 8.
    npm ci
    npx remotion browser ensure
    node scripts/fetch-kenney.mjs
-   pip install -r requirements.txt -r requirements-voice.txt
+   python --version   # must be 3.10-3.12 (Kokoro); always install with `python -m pip`, never bare `pip`
+python -m pip install -r requirements.txt -r requirements-voice.txt
    export REMOTION_TMP=/tmp/remotion-tmp GL=swangle
    git fetch origin && git checkout -b claude/smoke-$(cat /tmp/oj-date) origin/main
    ```

@@ -9,7 +9,7 @@ If it is ever deleted, recreate it with exactly these values.
 | Repositories | `ZhaztedValles/orange-juice-3d` and `ZhaztedValles/orange-juice-refs` |
 | Schedule | Daily, **2:00 AM Manila** (18:00 UTC) |
 | Prompt | `Follow WRITER.md in the orange-juice-3d repository exactly. Tonight is a normal Orange Juice run.` |
-| Network | **Full** (npm, pip, the Kenney downloads, the Kokoro voice model and web search) |
+| Network | **Full**, set on the routine's cloud environment (claude.ai/code → the environment picker → edit → Network access → Full). "Trusted" is not enough: it blocks remotion.media (the render browser) and kenney.nl (the 3D models). |
 | Tools | Web search **on** |
 | GitHub access | Push to `claude/*` branches (the default restriction) |
 

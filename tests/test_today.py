@@ -106,3 +106,23 @@ def test_held_id_without_a_folder_is_skipped():
     held = {"status": "held", "reasons": ["r"], "attempts": 2}
     p = plan(render={"004-gone-one": held, "005-still-here": held}, videos=["000-bridge", "005-still-here"])
     assert [h["id"] for h in p["held"]] == ["005-still-here"]
+
+
+class _BrokenStore:
+    def names(self):
+        raise RuntimeError("gh release view failed: Failed to log in using token")
+
+
+def test_queue_names_falls_back_to_public_api():
+    from tools import today
+    data = {"assets": [{"name": "001-a.mp4"}, {"name": "001-a.yml"}]}
+    assert today.queue_names(_BrokenStore(), fetch=lambda url: data) == ["001-a.mp4", "001-a.yml"]
+
+
+def test_queue_names_public_404_is_empty():
+    import urllib.error
+    from tools import today
+
+    def nf(url):
+        raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
+    assert today.queue_names(_BrokenStore(), fetch=nf) == []

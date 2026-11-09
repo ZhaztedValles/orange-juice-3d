@@ -78,6 +78,33 @@ def summary(p):
     return "\n".join(lines)
 
 
+PUBLIC_RELEASE = "https://api.github.com/repos/ZhaztedValles/orange-juice-3d/releases/tags/queue"
+
+
+def queue_names(store, fetch=None):
+    """Asset names of the queue release. The repo is public, so when `gh` is missing or not logged in (as in the
+    writer's cloud session) the names are read from the public API without a token; a 404 is an empty queue."""
+    try:
+        return store.names()
+    except (RuntimeError, OSError) as e:
+        print(f"note: gh could not read the queue ({str(e)[:120]}); using the public API", file=sys.stderr)
+    import urllib.error
+    import urllib.request
+    if fetch is None:
+        def fetch(url):
+            req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json",
+                                                       "User-Agent": "orange-juice-writer"})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                return json.loads(r.read().decode("utf-8"))
+    try:
+        data = fetch(PUBLIC_RELEASE)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return []
+        raise
+    return [a["name"] for a in data.get("assets", [])]
+
+
 def main(argv):
     ap = argparse.ArgumentParser(description="tonight's plan for the writer")
     ap.add_argument("--json", action="store_true", help="print JSON instead of a summary")
@@ -89,7 +116,7 @@ def main(argv):
     videos = ROOT / "videos"
     video_ids = sorted(d.name for d in videos.iterdir() if d.is_dir()) if videos.is_dir() else []
     templates = [v for v in video_ids if video_check.is_template(videos / v)]
-    p = plan(bool(cfg.get("paused")), status.queued_ids(get_store().names()), render_state.load(ROOT / "state"),
+    p = plan(bool(cfg.get("paused")), status.queued_ids(queue_names(get_store())), render_state.load(ROOT / "state"),
              set(common.load_posted()), video_ids, entries, templates)
     print(json.dumps(p, indent=1) if a.json else summary(p))
     return 0

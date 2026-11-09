@@ -49,7 +49,8 @@ TZ=Asia/Manila date +%F > /tmp/oj-date && date +%s > /tmp/oj-start
 npm ci
 npx remotion browser ensure
 node scripts/fetch-kenney.mjs
-pip install -r requirements.txt -r requirements-voice.txt
+python --version   # must be 3.10-3.12 (Kokoro); always install with `python -m pip`, never bare `pip`
+python -m pip install -r requirements.txt -r requirements-voice.txt
 export REMOTION_TMP=/tmp/remotion-tmp GL=swangle
 git fetch origin && git checkout -b claude/oj-$(cat /tmp/oj-date) origin/main
 ```
@@ -57,6 +58,9 @@ git fetch origin && git checkout -b claude/oj-$(cat /tmp/oj-date) origin/main
 3. If `git ls-remote --heads origin claude/oj-$(cat /tmp/oj-date)` shows the branch already exists (an earlier run
    today), use `claude/oj-<date>-2` (then `-3`, ...) instead: `git checkout -b claude/oj-$(cat /tmp/oj-date)-2 origin/main`.
    If an install command fails, retry it once; if it fails again, stop and report the error. Push nothing.
+   A `getaddrinfo ENOTFOUND` / "could not resolve" error means the routine's network access is not **Full**: stop and
+   finish with "The routine needs Full network access (remotion.media, kenney.nl, huggingface.co)". Push nothing.
+   If `tools/voice.py` later fails with an espeak error, run `sudo apt-get install -y espeak-ng` once and retry.
 4. Find the refs checkout: `ls ..` must show `orange-juice-refs` next to `orange-juice-3d`. Save its path with
    `realpath ../orange-juice-refs > /tmp/oj-refs`. It holds `STYLE_BIBLE.md`, `reports/*.md`, `frames/` and `sheets/`.
    If it is missing, stop and finish with: "orange-juice-refs is not checked out next to orange-juice-3d; add it to
@@ -68,7 +72,8 @@ git fetch origin && git checkout -b claude/oj-$(cat /tmp/oj-date) origin/main
 ## 3. Tonight's plan
 
 Run `python tools/today.py`. It prints `paused`, the queue and posted counts, `make tonight`, the next id number and
-the held videos. If it fails with a `gh` error (no GitHub CLI login), run
+the held videos. Without a GitHub CLI login it reads the queue from the public GitHub API by itself (it prints a
+`note:` line); that is fine. Only if it still fails on the queue, run
 `OJ_LOCAL_QUEUE=/tmp/oj-no-queue python tools/today.py` instead (the queue then shows 0; nothing else changes) and
 mention it in your summary.
 
