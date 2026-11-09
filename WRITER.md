@@ -50,7 +50,10 @@ npm ci
 npx remotion browser ensure
 node scripts/fetch-kenney.mjs
 python --version   # must be 3.10-3.12 (Kokoro); always install with `python -m pip`, never bare `pip`
-python -m pip install -r requirements.txt -r requirements-voice.txt
+python -m pip install -r requirements.txt          # the tools (fast)
+python -m pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/cpu   # CPU-only torch, ~200 MB (never the CUDA build: GBs)
+python -m pip install -r requirements-voice.txt     # Kokoro voice
+command -v espeak-ng || sudo apt-get install -y -q espeak-ng   # Kokoro fallback for unknown words
 export REMOTION_TMP=/tmp/remotion-tmp GL=swangle
 git fetch origin && git checkout -b claude/oj-$(cat /tmp/oj-date) origin/main
 ```
