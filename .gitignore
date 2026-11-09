@@ -10,3 +10,5 @@ remotion-tmp/
 public/kenney/
 # private style references (another creator's frames) never go into this public repo
 references/
+__pycache__/
+.pytest_cache/
