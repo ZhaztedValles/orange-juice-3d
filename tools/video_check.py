@@ -41,7 +41,8 @@ JSM = "three/examples/jsm/"
 ENGINE_RE = re.compile(r"\.\./\.\./src/engine/([A-Za-z0-9_-]+)")
 SIBLING_RE = re.compile(r"\./([A-Za-z0-9_][A-Za-z0-9_.-]*)")
 JSM_RE = re.compile(r"[A-Za-z0-9_./-]+")
-FRAMES_RE = re.compile(r"export const FRAMES\s*=")
+FRAMES_DECL_RE = re.compile(r"\b(?:const|let|var)\s+FRAMES\b")      # any declaration, type annotation or not, comments included
+KEYWORD_COMMENT_RE = re.compile(r"\b(?:from|import|export)\s*/[*/]")  # a comment right after the keyword could hide the specifier
 SPEC_START_RE = re.compile(r"""\b(?:from|import)\s*(?=["'`])""")   # `from "x"` (import / export ... from) and `import "x"`
 SPEC_RE = re.compile(r"""(?:"([^"\n]*)"|'([^'\n]*)')""")            # one single-line string, either quote
 
@@ -52,7 +53,7 @@ FORBIDDEN = (
     ("eval", re.compile(r"\beval\b")),
     ("Function", re.compile(r"\bFunction\b")),                      # also `new Function`
     ("require", re.compile(r"\brequire\b")),
-    ("process.", re.compile(r"\bprocess\s*\.")),
+    ("process.", re.compile(r"\bprocess\s*(?:\?\.|\.|\[)|=\s*process\b")),   # process.x, process?.x, process["x"], p = process
     ("import(", re.compile(r"\bimport\s*(?:\(|/[*/])")),             # import(...), also import /*c*/ (...)
     ("child_process", re.compile(r"child_process")),
     ("globalThis", re.compile(r"\bglobalThis\b")),
@@ -60,7 +61,7 @@ FORBIDDEN = (
     ("EventSource", re.compile(r"\bEventSource\b")),
     ("sendBeacon", re.compile(r"sendBeacon")),
     ("importScripts", re.compile(r"importScripts")),
-    ("fs",re.compile(r"""["'](?:node:)?fs(?:/[^"'\n]*)?["']""")),    # the module, never a substring like "offset"
+    ("fs", re.compile(r"""["'](?:node:)?fs(?:/[^"'\n]*)?["']""")),    # the module, never a substring like "offset"
 )
 
 
@@ -109,6 +110,12 @@ def _url_ok(u):
     return p.scheme in ("http", "https") and bool(p.netloc)
 
 
+def _url_key(u):
+    """same source = same host (case-insensitive), path (minus a trailing slash) and query; http and https count as one"""
+    p = urlparse(u.strip())
+    return (p.netloc.lower(), p.path.rstrip("/"), p.query)
+
+
 def _check_meta(meta, tpl):
     out = []
     t = meta.get("title")
@@ -133,7 +140,7 @@ def _check_meta(meta, tpl):
         bad = [u for u in src if not _url_ok(u)]
         if bad:
             out.append(f"meta.yml: sources must be http(s) URLs, not {bad[0]!r}")
-        elif len({u.strip().rstrip("/") for u in src}) < 2 and not tpl:
+        elif len({_url_key(u) for u in src}) < 2 and not tpl:
             out.append("meta.yml: sources needs at least 2 distinct http(s) URLs")
     return out
 
@@ -267,6 +274,8 @@ def _check_code(folder, files, engine):
             out.append(f"{name}: cannot read as utf-8 ({e})")
             continue
         seen = set()
+        if KEYWORD_COMMENT_RE.search(text):
+            out.append(f"{name}: comment between import keyword and specifier not allowed (no comment right after from / import / export)")
         for m in SPEC_START_RE.finditer(text):
             q = SPEC_RE.match(text, m.end())
             if q is None:                                   # unterminated, template literal, ...: fail closed
@@ -335,10 +344,10 @@ def problems(folder):
         except (OSError, ValueError) as e:
             out.append(str(e))
         if frames is not None:
-            decls = len(FRAMES_RE.findall((folder / "Video.tsx").read_text(encoding="utf-8")))
-            if decls > 1:
+            decls = len(FRAMES_DECL_RE.findall((folder / "Video.tsx").read_text(encoding="utf-8")))
+            if decls != 1:      # spec.frames matched one `export const FRAMES = <int>;`; any other declaration (even in a comment) could differ
                 out.append(f"Video.tsx: FRAMES is declared {decls} times; declare it exactly once as 'export const FRAMES = <integer>;' "
-                           f"(it is read textually, the first declaration wins)")
+                           f"(it is read textually, so no other const / let / var FRAMES, not even in a comment)")
             lo = 1 if tpl else MIN_FRAMES
             if not lo <= frames <= MAX_FRAMES:
                 out.append(f"Video.tsx: FRAMES {frames} outside {lo}-{MAX_FRAMES}"

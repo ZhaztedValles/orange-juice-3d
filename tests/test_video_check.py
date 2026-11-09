@@ -166,6 +166,10 @@ def test_meta_sources_duplicates_count_once(tmp_path):
     assert has(v, "sources", "distinct")
     set_meta(v, sources=["https://a.example/x", "https://a.example/x/"])
     assert has(v, "sources", "distinct")
+    set_meta(v, sources=["https://A.Example/x", "http://a.example/x"])
+    assert has(v, "sources", "distinct")
+    set_meta(v, sources=["https://a.example/x", "https://a.example/X"])    # paths are case-sensitive
+    assert probs(v) == []
     set_meta(v, sources=["https://a.example/x", "https://a.example/y"])
     assert probs(v) == []
 
@@ -233,6 +237,26 @@ def test_frames_must_be_declared_once(tmp_path):
     v = good(tmp_path)
     (v / "Video.tsx").write_text("// export const FRAMES = 1800;\nexport const FRAMES = 3000;\n")
     assert has(v, "FRAMES", "once")
+
+
+@pytest.mark.parametrize("src", [
+    "// export const FRAMES = 1800;\nexport const FRAMES: number = 9999;\n",
+    "export const FRAMES = 1800;\nconst FRAMES2 = 1;\nfunction f() { const FRAMES = 9999; return FRAMES; }\n",
+    "export const FRAMES = 1800;\nlet FRAMES = 1;\n",
+    "export const FRAMES = 1800;\nvar FRAMES: number = 1;\n",
+])
+def test_frames_any_other_declaration_is_rejected(tmp_path, src):
+    v = good(tmp_path)
+    (v / "Video.tsx").write_text(src)
+    assert has(v, "FRAMES", "once"), probs(v)
+
+
+@pytest.mark.parametrize("src", ["export let FRAMES = 1800;\n", "export var FRAMES = 1800;\n",
+                                 "export const FRAMES: number = 1800;\n"])
+def test_frames_must_be_export_const_literal(tmp_path, src):
+    v = good(tmp_path)
+    (v / "Video.tsx").write_text(src)
+    assert has(v, "FRAMES"), probs(v)
 
 
 def test_frames_must_be_literal(tmp_path):
@@ -490,12 +514,25 @@ def test_single_quoted_specifier_containing_a_double_quote_is_checked(tmp_path):
 
 
 @pytest.mark.parametrize("code", ['import x from "abc\nconst y = 1;\n', "import x from `lodash`;\n", "import x from 'abc\n",
-                                  'export * from\n"abc', 'import "abc\n', 'import x from "a\\"b";\n'])
+                                  'export * from\n"abc', 'import "abc\n'])
 def test_unparseable_specifier_fails_closed(tmp_path, code):
     v = good(tmp_path)
     add_ts(v, code)
-    assert has(v, "extra.ts", "import", "cannot be parsed") or any(
-        p.startswith("extra.ts: import") and "not allowed" in p for p in probs(v)), probs(v)
+    assert has(v, "extra.ts", "import specifier cannot be parsed"), probs(v)
+
+
+def test_escaped_quote_in_specifier_is_not_allowed(tmp_path):
+    v = good(tmp_path)
+    add_ts(v, 'import x from "a\\"b";\n')
+    assert rejected(v, "extra.ts", "a\\"), probs(v)
+
+
+@pytest.mark.parametrize("code", ['import x from /*c*/ "evil";\n', 'import {a} from // c\n"evil";\n', 'export * from /* c */ "evil";\n',
+                                  'import /*c*/ "evil";\n', 'import // c\n"evil";\n', 'export /*c*/ { a } from "evil";\n'])
+def test_comment_after_import_keyword_is_not_allowed(tmp_path, code):
+    v = good(tmp_path)
+    add_ts(v, code)
+    assert has(v, "extra.ts", "comment between import keyword and specifier not allowed"), probs(v)
 
 
 @pytest.mark.parametrize("spec", ["react", "three", "remotion", "@remotion/three", "@react-three/fiber",
@@ -554,6 +591,11 @@ def test_engine_module_names_come_from_the_engine_dir():
     ("Function", "const f = new  Function('a');"),
     ("require", 'const x = require("y");'),
     ("process.", "const e = process.env.X;"),
+    ("process.", "const e = process?.env;"),
+    ("process.", 'const e = process["env"];'),
+    ("process.", "const e = process\n.env;"),
+    ("process.", "const p = process;"),
+    ("process.", "let p; p = process;"),
     ("import(", 'const m = import("./y");'),
     ("import(", 'const m = import ("./y");'),
     ("import(", 'const m = import /*c*/ ("./y");'),
@@ -606,6 +648,7 @@ def test_forbidden_token_checked_in_main_video_file(tmp_path):
     "const offset = 3; const fsize = 2; const prefetch = 1; const refetch = () => 0;",
     "const x = { fs: 1 }; const buffs = [1]; const myfs = 2;",
     "const proc = processFrame(); const subprocess = 1; const preprocess = (a: number) => a;",
+    "const a = process_data; const b = processing; const c = processed; const d = 1; const e = d + processes;",
     "const important = 1; const reimport = 2; const importance = 3;",
     "const prefetch2 = 1; const livefetch = 2; const evaluate = (n: number) => n; const retrieval = 1;",
     "const a = 'xfs'; const b = \"fsck\";",

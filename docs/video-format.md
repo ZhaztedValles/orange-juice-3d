@@ -34,12 +34,13 @@ Only these extensions are allowed: `.ts .tsx .json .md .yml .wav`. Subdirectorie
   - `title`: a string of 1-100 characters;
   - `description`: a string of 1-4500 characters;
   - `tags`: a list of strings, 500 characters or fewer in total (may be empty);
-  - `sources`: a list of at least 2 distinct `http(s)` URLs (templates are exempt);
+  - `sources`: a list of at least 2 distinct `http(s)` URLs (same host, path and query = one source; http and https are the same; templates are exempt);
   - `template`: `true` or `false`, optional. `true` means never queued or posted; templates are exempt from the 55 s
     minimum and from `sources`.
 - `FRAMES` is 1650-2100 (55-70 s at 30 fps). A template may be shorter than 55 s, never longer than 70 s. It must be
   declared exactly once, as `export const FRAMES = <int>;` in `Video.tsx`: the checker and `audio/spec.py` read it
-  textually (the first match), so a second declaration or a commented-out copy is a problem.
+  textually (the first match), so any other `const` / `let` / `var FRAMES`, even in a comment or with a type
+  annotation, is a problem.
 - `words.json`: a list of `{w, s, e}` (text and seconds) with `s < e`, `s` non-decreasing, and the last `e` no later
   than `FRAMES / 30`. The words, taken in order, equal the words of the narration after lower-casing and removing every
   character that is not a letter, digit, apostrophe or hyphen (apostrophes and hyphens at the edges of a word are
@@ -62,10 +63,12 @@ The folder's code is rendered on GitHub from a public repo, so it may only impor
 - `./<file>`: a `.ts` / `.tsx` / `.json` file of the same folder (with or without extension), and `./words.json`.
 
 Every `from "..."`, `export ... from "..."` and `import "..."` specifier in every `.ts` / `.tsx` file is checked (single
-or double quotes; a specifier that cannot be parsed, such as a template literal or an unterminated string, is a problem).
+or double quotes; a specifier that cannot be parsed, such as a template literal or an unterminated string, is a problem;
+so is a comment right after `from` / `import` / `export`). The scan is textual: any `from '...'` or `import '...'` text,
+even inside a comment or a string, is checked as an import, so do not write such phrases in comments.
 `three/examples/jsm/<path>` may only contain letters, digits and `_ . / -`.
 These tokens are forbidden anywhere in that code, comments and string literals included: `fetch`, `XMLHttpRequest`,
-`eval`, `Function`, `require`, `process.`, `import(` (also `import /*c*/ (`), `child_process`, `globalThis`, `WebSocket`,
+`eval`, `Function`, `require`, `process` (`process.x`, `process?.x`, `process[...]`, `= process`), `import(` (also `import /*c*/ (`), `child_process`, `globalThis`, `WebSocket`,
 `EventSource`, `sendBeacon`, `importScripts`, and the `fs` module (`"fs"`, `"node:fs"`, `"fs/promises"`, ...). `fetch`,
 `eval`, `Function`, `require`, `globalThis`, `WebSocket` and `EventSource` are matched as whole words (`prefetch` or
 `functional` are fine). Do not write them even in a comment.
