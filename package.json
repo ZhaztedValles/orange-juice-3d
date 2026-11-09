@@ -1,0 +1,32 @@
+{
+  "name": "orange-juice-3d",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Orange Juice Productions: 3D cartoon story Shorts rendered with three.js inside Remotion",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "fetch-kenney": "node scripts/fetch-kenney.mjs",
+    "stills": "node scripts/bridge-stills.mjs"
+  },
+  "dependencies": {
+    "@react-three/fiber": "9.4.0",
+    "@react-three/postprocessing": "3.0.4",
+    "@remotion/bundler": "4.0.538",
+    "@remotion/cli": "4.0.538",
+    "@remotion/renderer": "4.0.538",
+    "@remotion/three": "4.0.538",
+    "postprocessing": "6.37.8",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "remotion": "4.0.538",
+    "three": "0.180.0"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.2",
+    "@types/three": "0.180.0",
+    "typescript": "5.9.3"
+  }
+}
