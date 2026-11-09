@@ -1,0 +1,73 @@
+# Post the next queued Short to YouTube (python autopilot/publish.py youtube).
+#
+# The MAIN trigger is cron-job.org, which dispatches this workflow at each slot (19:00 Asia/Manila) with dry_run=false.
+# The `schedule` below is only the backup, a few minutes later: publish.py posts at most once per slot (state/posted),
+# so the two triggers can never double-post. Nobody starts this by hand: a manual run defaults to a dry run.
+# Times are UTC. When config.yml `slots` change, list a cron inside each slot's window here (tests/test_publish.py
+# checks it): 19:05 Manila = 11:05 UTC; for a 12:00 slot add 04:05 UTC.
+#
+# Security (public repo): this job runs no video code at all, only the repo's own autopilot/ Python from main. The
+# checkout does not persist credentials (tools/save_state.sh sets the push credential from GH_TOKEN, only in its step);
+# the YouTube secrets are visible to the posting step only; nothing user-influenced is interpolated into a script.
+name: post
+
+on:
+  schedule:
+    - cron: "5 11 * * *"        # backup: 19:05 Manila (cron-job.org fires at 19:00)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (show what would be posted and the channel, upload nothing)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: oj-post
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write           # commit state/posted, delete the posted assets from the queue release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main             # latest state, not the commit that was current when the trigger fired
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Post to YouTube
+        env:
+          GH_TOKEN: ${{ github.token }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}        # empty on a scheduled run, which is a real run
+        run: |
+          args=()
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          python autopilot/publish.py youtube "${args[@]}"
+
+      - name: Save progress
+        if: ${{ always() && inputs.dry_run != true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash tools/save_state.sh "Post: state $(date -u +%Y-%m-%dT%H:%MZ)"
+
+      - name: Queue report
+        if: ${{ always() }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python autopilot/publish.py report
