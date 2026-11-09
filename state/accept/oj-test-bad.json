@@ -1,0 +1,7 @@
+{
+ "branch": "claude/oj-test-bad",
+ "sha": "8e5ffdaa6f6769258adaf0c4d091bd8a7f19563d",
+ "attempts": 1,
+ "parked": true,
+ "reason": "path rules"
+}
