@@ -1,0 +1,9 @@
+{
+ "status": "held",
+ "reasons": [
+  "true peak -0.9 dBTP (want <= -1)"
+ ],
+ "attempts": 1,
+ "updated": "2026-11-09T10:41:41+00:00",
+ "source": "2d358422995c8fba784e205d77dc31fcb1cf43dd"
+}
