@@ -61,3 +61,23 @@ def test_summary_and_json_are_serialisable():
     json.dumps(p)
     text = today.summary(p)
     assert "make tonight: 1" in text and "001-a-story: fix" in text and "- r" in text
+
+
+def test_templates_are_never_held_or_queued():
+    held = {"status": "held", "reasons": ["r"], "attempts": 1}
+    p = today.plan(False, ["000-bridge", "005-tpl-two", "006-real-one"],
+                   {"000-bridge": held, "005-tpl-two": held, "006-real-one": held}, set(),
+                   ["000-bridge", "005-tpl-two", "006-real-one"], [], templates=["005-tpl-two"])
+    assert [h["id"] for h in p["held"]] == ["006-real-one"]
+    assert p["queue_count"] == 1
+    assert p["next_id"] == "007"
+    # 000-bridge is a template even when the caller does not say so
+    assert today.plan(False, ["000-bridge"], {"000-bridge": held}, set(), ["000-bridge"], [])["held"] == []
+
+
+def test_ledger_owns_the_template_id():
+    import accept_check
+    import ledger
+    import writer_check
+    assert ledger.TEMPLATE == "000-bridge" == accept_check.TEMPLATE
+    assert not hasattr(writer_check, "TEMPLATE")

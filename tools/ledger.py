@@ -31,6 +31,7 @@ from urllib.parse import urlparse
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
+TEMPLATE = "000-bridge"    # the engine template: never queued, posted or written to, and the only video with no ledger entry
 STATUSES = ("idea", "coded", "dropped")
 SCORE_KEYS = ("strange", "obscurity", "people", "visual", "provable")
 MIN_STRANGE = MIN_OBSCURITY = 4

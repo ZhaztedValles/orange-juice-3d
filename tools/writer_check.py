@@ -14,7 +14,6 @@ import ledger  # noqa: E402
 import script_md  # noqa: E402
 import video_check  # noqa: E402
 
-TEMPLATE = "000-bridge"    # the only video exempt from the ledger (same as accept_check.TEMPLATE)
 MIN_WPS, MAX_WPS, AIM_WPS = 3.3, 4.1, 3.7
 PIVOT = "You see,"
 
@@ -36,7 +35,7 @@ def check(folder, root=None):
         root = folder.parent.parent if (folder.parent.parent / "stories").is_dir() else ROOT
     vid = folder.name
     out = list(video_check.problems(folder))
-    if vid != TEMPLATE:
+    if vid != ledger.TEMPLATE:
         try:
             entries, _ = ledger.load(root)
             out += ledger.video_problems(vid, entries)

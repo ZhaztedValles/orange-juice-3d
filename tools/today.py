@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "autopilot"))
 import ledger  # noqa: E402
 import render_state  # noqa: E402
 import status  # noqa: E402
+import video_check  # noqa: E402
 
 FIX_ATTEMPTS = 2          # a held video with this many failed attempts is dropped, not fixed again
 NUMBER_RE = re.compile(r"(\d{3})-")
@@ -25,13 +26,16 @@ def _numbers(ids):
     return [int(m.group(1)) for i in ids if isinstance(i, str) and (m := NUMBER_RE.match(i))]
 
 
-def plan(paused, queue_ids, render_state: dict, posted: set, video_ids: list, entries) -> dict:
+def plan(paused, queue_ids, render_state: dict, posted: set, video_ids: list, entries, templates=()) -> dict:
     """tonight's plan. Pure: no I/O.
-    render_state = {id: state}; next_id is one above the highest number among the video folders and the ledger's
+    render_state = {id: state}; templates = ids of template folders (meta.yml `template: true`; `000-bridge` always
+    is one): they are never listed as held and never counted as queued. next_id is one above the highest number among the video folders and the ledger's
     '<NNN>-<slug>' ids (so a dropped story's number is not reused), at least 001."""
+    skip = set(templates) | {ledger.TEMPLATE}
+    queue_ids = [v for v in queue_ids if v not in skip]
     held = []
     for vid, st in sorted(render_state.items()):
-        if st.get("status") != "held":
+        if st.get("status") != "held" or vid in skip:
             continue
         attempts = int(st.get("attempts", 0))
         held.append({"id": vid, "reasons": list(st.get("reasons", [])), "attempts": attempts,
@@ -66,8 +70,9 @@ def main(argv):
     entries, _ = ledger.load(ROOT)
     videos = ROOT / "videos"
     video_ids = sorted(d.name for d in videos.iterdir() if d.is_dir()) if videos.is_dir() else []
+    templates = [v for v in video_ids if video_check.is_template(videos / v)]
     p = plan(bool(cfg.get("paused")), status.queued_ids(get_store().names()), render_state.load(ROOT / "state"),
-             set(common.load_posted()), video_ids, entries)
+             set(common.load_posted()), video_ids, entries, templates)
     print(json.dumps(p, indent=1) if a.json else summary(p))
     return 0
 

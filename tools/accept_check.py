@@ -45,7 +45,7 @@ from pathlib import Path
 CODE_ROOT = Path(__file__).resolve().parent.parent
 sys.path[:0] = [str(CODE_ROOT), str(CODE_ROOT / "tools")]
 
-TEMPLATE = "000-bridge"
+from ledger import TEMPLATE  # noqa: E402  (imported from the trusted CODE_ROOT copy: sys.path starts with it)
 VIDEO_PATH_RE = re.compile(r"videos/(\d{3}-[a-z0-9-]{3,50})/[\w.-]+\.(?:ts|tsx|json|md|yml|wav)", re.ASCII)
 VIDEO_DIR_RE = re.compile(r"videos/([^/]+)/", re.ASCII)
 STORIES_RE = re.compile(r"stories/(?:ledger|banned)\.yml", re.ASCII)
