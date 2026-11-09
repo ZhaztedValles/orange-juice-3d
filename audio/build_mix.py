@@ -23,13 +23,14 @@ from . import score, sfx_gen, spec  # noqa: E402
 from .dsp import SR, ns, dbg, rng, pan, place, st, integrated, true_peak, write_wav  # noqa: E402
 
 TARGET_LUFS = -14.0
-CEIL_DBTP = -1.2
+CEIL_DBTP = -2.0                                         # master true-peak ceiling: 1 dB of headroom for AAC overshoot,
+                                                         # so the encoded mp4 stays <= -1 dBTP (AAC 192k measured +0.3 dB over the wav)
 # Levels below the voice's integrated loudness, before the master gain: the bridge's balance
 # (its stems at a -15 LUFS master: voice -15.4, music -25.8, sfx -29.1 LUFS integrated).
 MUSIC_BELOW_VOICE_DB = 10.4                              # -15.4 - (-25.8)
 SFX_BELOW_VOICE_DB = 13.7                                # -15.4 - (-29.1), the sum of all events
 DUCK_DB = -3.0
-VOICE_PEAK_DBTP = -2.0                                   # voice alone after the master gain, so the master limiter rests
+VOICE_PEAK_DBTP = -2.8                                  # voice alone after the master gain: under CEIL_DBTP, so the master limiter rests
 
 
 def duck_db(spans, n, depth=DUCK_DB, pre=0.08, post=0.12, att=0.07, rel=0.45):

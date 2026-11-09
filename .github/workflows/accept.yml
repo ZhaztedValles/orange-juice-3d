@@ -1,0 +1,546 @@
+# Accept: the gate for the nightly writer's branches (claude/oj-<date>). Ported from FactPop's accept-routine.yml, but
+# run from main's copy of this file (schedule / workflow_dispatch), never from a pushed branch's.
+#
+# find (contents: read, issues: write) - lists origin's claude/oj-* branches (git ls-remote), fetches
+#   them and picks the oldest by commit date (one per run; the next run takes the next). Tripwire: a branch whose diff
+#   vs main OR any of whose commits touches .github/ is never processed; an issue "Orange Juice: writer branch touched
+#   workflows" names it and its paths. A branch rejected for its content at its current sha (state/accept/<slug>.json)
+#   is skipped until it is pushed again, or until it is named in the `branch` input of a manual run.
+# check (contents: read) - main's trusted accept_check (a git worktree of main, never the branch's copy) on the branch's
+#   diff, `git merge --no-commit --no-ff` into main in the workspace, `npm run gen`, the trusted check again on the
+#   merged tree (path rules + video_check of every touched folder), then the registry check, tsc, pytest, vitest and a
+#   smoke still per touched video (artifact smoke-<branch>).
+# merge (contents: write, actions: write) - a fresh checkout of main: main may have moved since check only in state/
+#   (render state commits); the trusted check runs again on the actual merge (Python only), the registry is regenerated
+#   with main's scripts/gen-registry.mjs, then commit "Accept <branch>", push main (3 tries), dispatch render.yml, and
+#   last delete the branch (force-with-lease on the sha that was checked).
+# record-failure (contents: write, issues: write) - after any failed run on the branch (check failed or cancelled, or
+#   merge failed or cancelled before main was pushed), state/accept/<slug>.json = {sha, attempts, parked, reason}.
+#   A CONTENT rejection (path rules, merge conflict, the merged-tree check, registry/tsc, pytest, vitest, smoke
+#   stills) parks the branch at once; a hang in those steps is one too (coreutils `timeout -k 30` turns it into a
+#   failure; step timeouts are the backstop). Anything else (npm / network / Kenney / apt / job timeouts or cancels,
+#   main moved outside state/, push retries exhausted) only counts an attempt for that sha and the next scheduled run
+#   retries; once attempts > 5 the branch is parked ("repeated infrastructure failures (check logs)"). find skips only
+#   parked branches at their parked sha, and the issue "Orange Juice: writer branch rejected" lists them.
+#   Some infrastructure faults inside the named steps (the browser / GL inside remotion still, a flaky test on main)
+#   can also park a branch; recover by pushing the branch again or naming it in a manual run's `branch` input.
+#
+# Security (public repo): the branch is writer-authored. Its TSX runs only in check, in vitest (which imports the
+# registry) and the smoke stills - both after every trusted check and after pytest, in a job with contents: read, no
+# secrets, no persisted git credentials, caches restored but never saved. merge holds the write token and runs no
+# writer code: Python static checks, main's gen-registry (it reads folder names only) and git. The push credential is
+# set on the remote only in the push / delete steps and removed after them.
+#
+# Residual risk, accepted: GitHub runs workflow files from ANY pushed branch, so a writer branch that adds or edits a
+# file under .github/workflows/ gets that workflow run on push, with a GITHUB_TOKEN (up to the repository's default
+# workflow permissions) - before Accept ever looks at it. Mitigations: Accept itself runs only from main's copy, the
+# tripwire above alerts on any such branch and never processes it, and the writer's rules forbid .github/. The full fix
+# is a writer credential without the `workflows` permission (GitHub then refuses the push of any workflow change).
+name: accept
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "Writer branch to accept (claude/oj-...); empty = the oldest one. Names a parked branch to retry it."
+        default: ""
+        required: false
+
+concurrency:
+  group: oj-accept
+  cancel-in-progress: false
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash          # bash -eo pipefail, so `cmd | tee` fails when cmd fails
+
+jobs:
+  find:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      issues: write       # the workflow tripwire issue
+    outputs:
+      branch: ${{ steps.find.outputs.branch }}
+      sha: ${{ steps.find.outputs.sha }}
+      slug: ${{ steps.find.outputs.slug }}
+      attempt: ${{ steps.find.outputs.attempt }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Find the oldest writer branch (main's accept_check; nothing from the branches runs)
+        id: find
+        env:
+          ONLY: ${{ inputs.branch }}
+        run: |
+          only=()
+          if [ -n "$ONLY" ]; then
+            if [[ ! "$ONLY" =~ ^claude/oj-[A-Za-z0-9._-]+$ ]]; then echo "::error::not a writer branch name"; exit 1; fi
+            only=(--only "$ONLY")
+          fi
+          res=$(python3 tools/accept_check.py --find "${only[@]}" --tripwire-out "$RUNNER_TEMP/tripwire.md")
+          echo "$res"
+          branch=$(jq -r '.branch' <<< "$res")
+          sha=$(jq -r '.sha' <<< "$res")
+          slug=$(jq -r '.slug' <<< "$res")
+          attempt=$(jq -r '.attempt' <<< "$res")
+          if [ -n "$branch" ]; then
+            if [[ ! "$branch" =~ ^claude/oj-[A-Za-z0-9._-]+$ || ! "$sha" =~ ^[0-9a-f]{40}$ || "claude/$slug" != "$branch" ||
+                  ! "$attempt" =~ ^[0-9]+$ ]]; then
+              echo "::error::unexpected find result"; exit 1
+            fi
+            echo "### Picked \`$branch\` at $sha (attempt $attempt for this sha)" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No writer branch to accept" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          {
+            echo "branch=$branch"
+            echo "sha=$sha"
+            echo "slug=$slug"
+            echo "attempt=$attempt"
+            echo "tripped=$(jq '.tripped | length' <<< "$res")"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Tripwire - a writer branch touched .github/
+        if: steps.find.outputs.tripped != '0'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          title="Orange Juice: writer branch touched workflows"
+          echo "::error::$title (not processed): see the issue"
+          { echo "### $title"; cat "$RUNNER_TEMP/tripwire.md"; } >> "$GITHUB_STEP_SUMMARY"
+          bash tools/upsert_issue.sh "$title" "$RUNNER_TEMP/tripwire.md"
+
+  check:
+    needs: find
+    if: needs.find.outputs.branch != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    outputs:
+      main_sha: ${{ steps.base.outputs.sha }}
+      content_rejected: ${{ steps.verdict.outputs.content_rejected }}
+      reason: ${{ steps.verdict.outputs.reason }}
+    env:
+      BRANCH: ${{ needs.find.outputs.branch }}
+      HEAD_SHA: ${{ needs.find.outputs.sha }}
+      TMPDIR: ${{ github.workspace }}/../remotion-tmp
+    steps:
+      # The job starts from main; the branch (HEAD_SHA, its sha when find ran) is merged into it further down.
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Trusted copy of main (the checker runs from here, never from the branch); fetch the branch
+        id: base
+        run: |
+          if [[ ! "$BRANCH" =~ ^claude/oj-[A-Za-z0-9._-]+$ || ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then exit 1; fi
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          git worktree add -q --detach "$RUNNER_TEMP/trusted" "$sha"
+          git fetch -q --no-tags origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || true
+          git cat-file -e "$HEAD_SHA^{commit}" 2>/dev/null || git fetch -q --no-tags origin "$HEAD_SHA"
+          git config user.name "orange-juice-autopilot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Install ffmpeg (the short_qa tests need it)
+        run: command -v ffmpeg >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null; }
+
+      - name: Path rules (main's checker on the branch's diff)
+        id: paths
+        run: python "$RUNNER_TEMP/trusted/tools/accept_check.py" --paths-only HEAD "$HEAD_SHA" | tee -a "$RUNNER_TEMP/problems.txt"
+
+      - name: Merge the branch into main (not committed)
+        id: merge
+        run: |
+          git merge -q --no-commit --no-ff "$HEAD_SHA" || {
+            echo "The branch does not merge cleanly into main" | tee -a "$RUNNER_TEMP/problems.txt"; exit 1; }
+
+      # Node, Remotion's browser and the Kenney models, all from main's own lockfile and scripts (the branch cannot
+      # change them). Caches are only restored here, never saved: render.yml's plan job warms them on main.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Restore node_modules + Remotion browser
+        id: nm
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: nm-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+
+      - name: Install (only when the cache is missing)
+        if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci && npx remotion browser ensure
+
+      - name: Restore Kenney models
+        uses: actions/cache/restore@v4
+        with:
+          path: public/kenney
+          key: kenney-${{ hashFiles('scripts/fetch-kenney.mjs') }}
+
+      - name: Fetch Kenney models (CC0, no-op when restored)
+        run: node scripts/fetch-kenney.mjs
+
+      - name: Regenerate the registry
+        run: npm run gen
+
+      - name: Merged tree (main's checker - path rules, video_check of each touched folder, story files)
+        id: merged
+        run: |
+          python "$RUNNER_TEMP/trusted/tools/accept_check.py" --videos-out "$RUNNER_TEMP/videos.txt" "$(git rev-parse HEAD)" "$HEAD_SHA" \
+            | tee -a "$RUNNER_TEMP/problems.txt"
+
+      # From here on, the summary gets one pass/fail line per step; the output stays in the step log.
+      - name: Registry up to date, TypeScript compiles
+        id: tsc
+        timeout-minutes: 10     # backstop; `timeout` below turns a hang into a failure (= content rejection)
+        run: |
+          timeout -k 30 120 npm run gen -- --check || { echo "registry out of date (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1; }
+          timeout -k 30 420 npx tsc --noEmit || { echo "tsc failed or hung (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1; }
+
+      # tests/ is main's (the branch cannot change it); pytest runs before anything executes the branch's TSX
+      - name: pytest
+        id: pytest
+        timeout-minutes: 10
+        run: timeout -k 30 540 python -m pytest -q tests || { echo "pytest failed or hung (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1; }
+
+      # from here on the branch's video code runs (vitest imports the registry; the stills render it)
+      - name: vitest
+        id: vitest
+        timeout-minutes: 10
+        run: timeout -k 30 540 npx vitest run || { echo "vitest failed or hung (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1; }
+
+      - name: Smoke stills
+        id: stills
+        timeout-minutes: 15     # backstop; all stills share a 14-minute `timeout` budget, so a hang is a failure
+        run: |
+          mkdir -p "$TMPDIR" smoke
+          deadline=$((SECONDS + 810))
+          while read -r id frames; do
+            if [[ ! "$id" =~ ^[0-9]{3}-[a-z0-9-]{3,50}$ || ! "$frames" =~ ^[0-9]+$ ]]; then
+              echo "bad videos.txt line" | tee -a "$RUNNER_TEMP/problems.txt"; exit 1
+            fi
+            left=$((deadline - SECONDS))
+            if [ "$left" -le 0 ]; then echo "smoke stills ran out of time before $id" >> "$RUNNER_TEMP/problems.txt"; exit 1; fi
+            echo "oj-$id: frame $((frames / 2)) of $frames"
+            if ! timeout -k 30 "$left" npx remotion still src/index.ts "oj-$id" "smoke/$id.png" --frame=$((frames / 2)) --scale=0.5 \
+                 --gl=swangle --props='{"captions":false}'; then
+              echo "smoke still failed or hung for $id (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1
+            fi
+          done < "$RUNNER_TEMP/videos.txt"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.stills.outcome != 'skipped'
+        with:
+          name: smoke-${{ needs.find.outputs.slug }}
+          path: smoke/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      # content rejection = one of the named content steps failed (not an install, network, cache or timeout problem)
+      - name: Verdict
+        id: verdict
+        if: always()
+        env:
+          OUTCOME: ${{ job.status }}
+          ATTEMPT: ${{ needs.find.outputs.attempt }}
+          O_PATHS: ${{ steps.paths.outcome }}
+          O_MERGE: ${{ steps.merge.outcome }}
+          O_MERGED: ${{ steps.merged.outcome }}
+          O_TSC: ${{ steps.tsc.outcome }}
+          O_PYTEST: ${{ steps.pytest.outcome }}
+          O_VITEST: ${{ steps.vitest.outcome }}
+          O_STILLS: ${{ steps.stills.outcome }}
+        run: |
+          reasons=()
+          [ "$O_PATHS" = failure ] && reasons+=("path rules")
+          [ "$O_MERGE" = failure ] && reasons+=("merge conflict with main")
+          [ "$O_MERGED" = failure ] && reasons+=("merged-tree check")
+          [ "$O_TSC" = failure ] && reasons+=("registry/tsc")
+          [ "$O_PYTEST" = failure ] && reasons+=("pytest")
+          [ "$O_VITEST" = failure ] && reasons+=("vitest")
+          [ "$O_STILLS" = failure ] && reasons+=("smoke stills")
+          reason=$(IFS=,; echo "${reasons[*]}")
+          if [ -n "$reason" ]; then
+            echo "content_rejected=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "content_rejected=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          {
+            if [ "$OUTCOME" = "success" ]; then
+              echo "### Accept check passed for \`$BRANCH\`"
+            elif [ -n "$reason" ]; then
+              echo "### \`$BRANCH\` rejected ($reason) - kept and parked until it is pushed again"
+            else
+              echo "### Accept check for \`$BRANCH\` failed, not for its content (infrastructure) - attempt $ATTEMPT for this sha: counted; parked after 5, until then the next scheduled run retries"
+            fi
+            if [ -s "$RUNNER_TEMP/problems.txt" ]; then
+              echo '```'
+              tail -n 100 "$RUNNER_TEMP/problems.txt"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  merge:
+    needs: [find, check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write     # push main, delete the branch
+      actions: write      # dispatch render.yml
+    outputs:
+      pushed: ${{ steps.push.outputs.pushed }}
+      content_rejected: ${{ steps.summary.outputs.content_rejected }}
+      reason: ${{ steps.summary.outputs.reason }}
+    env:
+      BRANCH: ${{ needs.find.outputs.branch }}
+      SLUG: ${{ needs.find.outputs.slug }}
+      HEAD_SHA: ${{ needs.find.outputs.sha }}
+      CHECKED_MAIN: ${{ needs.check.outputs.main_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Main moved only in state/ since the check
+        id: base
+        run: |
+          if [[ ! "$BRANCH" =~ ^claude/oj-[A-Za-z0-9._-]+$ || "claude/$SLUG" != "$BRANCH" || ! "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            exit 1
+          fi
+          sha=$(git rev-parse HEAD)
+          if ! git merge-base --is-ancestor "$CHECKED_MAIN" "$sha"; then
+            echo "main is not a descendant of the checked main ($CHECKED_MAIN)" | tee -a "$RUNNER_TEMP/problems.txt"; exit 1
+          fi
+          moved=$(git diff --name-only --no-renames "$CHECKED_MAIN" "$sha" -- . ':(exclude)state')
+          if [ -n "$moved" ]; then
+            { echo "main changed outside state/ since the check (not recorded; the next scheduled run checks the branch again):"
+              echo "$moved"; } | tee -a "$RUNNER_TEMP/problems.txt"
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          git worktree add -q --detach "$RUNNER_TEMP/trusted" "$sha"
+          git fetch -q --no-tags origin "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" || true
+          git cat-file -e "$HEAD_SHA^{commit}" 2>/dev/null || git fetch -q --no-tags origin "$HEAD_SHA"
+          git config user.name "orange-juice-autopilot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Path rules (main's checker on the branch's diff)
+        id: paths
+        run: python "$RUNNER_TEMP/trusted/tools/accept_check.py" --paths-only HEAD "$HEAD_SHA" | tee -a "$RUNNER_TEMP/problems.txt"
+
+      - name: Merge the branch into main (not committed yet)
+        id: merge
+        run: |
+          git merge -q --no-commit --no-ff "$HEAD_SHA" || {
+            echo "The branch does not merge cleanly into main" | tee -a "$RUNNER_TEMP/problems.txt"; exit 1; }
+
+      - name: Merged tree (main's checker; static, no video code runs)
+        id: merged
+        env:
+          BASE: ${{ steps.base.outputs.sha }}
+        run: python "$RUNNER_TEMP/trusted/tools/accept_check.py" "$BASE" "$HEAD_SHA" | tee -a "$RUNNER_TEMP/problems.txt"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # main's scripts/gen-registry.mjs (the path rules keep scripts/ unchanged): it lists folder names, never imports them
+      - name: Regenerate the registry, drop this branch's and stale failure records
+        run: |
+          node scripts/gen-registry.mjs
+          node scripts/gen-registry.mjs --check
+          git add src/videos.generated.ts
+          git rm -q --ignore-unmatch "state/accept/$SLUG.json"
+          python "$RUNNER_TEMP/trusted/tools/accept_check.py" --prune-failures
+          if [ -d state/accept ]; then git add -A state/accept; fi
+
+      - name: Commit and push main
+        id: push
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ steps.base.outputs.sha }}
+        run: |
+          trap 'git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}"' EXIT
+          trailer="Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+          if git rev-parse -q --verify MERGE_HEAD > /dev/null || ! git diff --cached --quiet; then
+            git commit -q -m "Accept $BRANCH" -m "$trailer"
+          else
+            echo "Already in main, nothing to commit."
+          fi
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}"
+          for i in 1 2 3; do
+            if git push -q origin HEAD:refs/heads/main; then break; fi
+            if [ "$i" = 3 ]; then
+              echo "Could not push to main after 3 tries (not recorded; the next scheduled run retries)" | tee -a "$RUNNER_TEMP/problems.txt"
+              exit 1
+            fi
+            sleep $((i * 5))
+            git fetch -q origin main
+            # only render-state commits may slip in between; anything else needs a fresh check
+            moved=$(git diff --name-only --no-renames "$BASE" origin/main -- . ':(exclude)state')
+            if [ -n "$moved" ]; then
+              { echo "main changed outside state/ during the push (not recorded; the next scheduled run checks the branch again):"
+                echo "$moved"; } | tee -a "$RUNNER_TEMP/problems.txt"
+              exit 1
+            fi
+            # the path rules again against the new main (its render state decides which folders are held); a failure
+            # here is not recorded either: the next run's check sees the same main and records it
+            python "$RUNNER_TEMP/trusted/tools/accept_check.py" --paths-only "$(git rev-parse origin/main)" "$HEAD_SHA" \
+              | tee -a "$RUNNER_TEMP/problems.txt"
+            git merge -q -m "Accept $BRANCH: merge main" -m "$trailer" origin/main
+          done
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Start the render
+        id: dispatch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run render.yml --ref main
+
+      # Last, so a failed push or dispatch leaves the branch for the next run (which finds main up to date and
+      # dispatches again); deleted only if it still points at the sha that was checked (a newer push gets its own run)
+      - name: Retire the branch
+        id: delete
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          trap 'git remote set-url origin "https://github.com/${GITHUB_REPOSITORY}"' EXIT
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}"
+          git push -q --force-with-lease="refs/heads/$BRANCH:$HEAD_SHA" origin ":refs/heads/$BRANCH" \
+            || echo "::notice::$BRANCH moved since find; kept for the next run"
+
+      - name: Summary
+        id: summary
+        if: always()
+        env:
+          ATTEMPT: ${{ needs.find.outputs.attempt }}
+          O_PATHS: ${{ steps.paths.outcome }}
+          O_MERGE: ${{ steps.merge.outcome }}
+          O_MERGED: ${{ steps.merged.outcome }}
+          PUSHED: ${{ steps.push.outcome }}
+          DISPATCHED: ${{ steps.dispatch.outcome }}
+          DELETED: ${{ steps.delete.outcome }}
+        run: |
+          reasons=()
+          [ "$O_PATHS" = failure ] && reasons+=("path rules")
+          [ "$O_MERGE" = failure ] && reasons+=("merge conflict with main")
+          [ "$O_MERGED" = failure ] && reasons+=("merged-tree check")
+          reason=$(IFS=,; echo "${reasons[*]}")
+          if [ -n "$reason" ]; then
+            echo "content_rejected=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "content_rejected=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          {
+            if [ -n "$reason" ]; then
+              echo "### \`$BRANCH\` rejected at merge ($reason) - main unchanged, kept and parked until it is pushed again"
+            elif [ "$PUSHED" != "success" ]; then
+              echo "### Merge failed for \`$BRANCH\`, not for its content - main unchanged, branch kept, attempt $ATTEMPT for this sha: counted; parked after 5, until then the next scheduled run retries"
+            elif [ "$DISPATCHED" != "success" ]; then
+              echo "### \`$BRANCH\` merged into main; the render dispatch failed - re-run it: \`gh workflow run render.yml --ref main\` (the next Accept run also does, as the branch is kept)"
+            elif [ "$DELETED" != "success" ]; then
+              echo "### \`$BRANCH\` merged, render dispatched; deleting the branch failed - delete it by hand"
+            else
+              echo "### Accepted \`$BRANCH\`: merged into main, render dispatched, branch retired"
+            fi
+            if [ -s "$RUNNER_TEMP/problems.txt" ]; then
+              echo '```'
+              tail -n 100 "$RUNNER_TEMP/problems.txt"
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # any failed run on the branch (check failed or cancelled, or merge failed or cancelled before main was pushed):
+  # a content rejection parks the branch at this sha at once; anything else counts an attempt for this sha and parks
+  # only once attempts > 5 (a human cancel counts once too - acceptable). Parked branches are listed in an issue.
+  record-failure:
+    needs: [find, check, merge]
+    if: >-
+      always() && needs.find.outputs.branch != '' &&
+      (needs.check.result == 'failure' || needs.check.result == 'cancelled' ||
+       ((needs.merge.result == 'failure' || needs.merge.result == 'cancelled') && needs.merge.outputs.pushed != 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write     # commit state/accept
+      issues: write       # the "writer branch rejected" issue
+    env:
+      BRANCH: ${{ needs.find.outputs.branch }}
+      HEAD_SHA: ${{ needs.find.outputs.sha }}
+      CONTENT: ${{ needs.check.outputs.content_rejected == 'true' || needs.merge.outputs.content_rejected == 'true' }}
+      REASON: ${{ needs.check.outputs.reason || needs.merge.outputs.reason }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Record (and drop the records of branches that are gone)
+        id: record
+        run: |
+          if [ "$CONTENT" = "true" ]; then
+            rec=$(python3 tools/accept_check.py --record-failure "$BRANCH" "$HEAD_SHA" "$REASON")
+          else
+            rec=$(python3 tools/accept_check.py --record-infra "$BRANCH" "$HEAD_SHA")
+          fi
+          echo "$rec"
+          python3 tools/accept_check.py --prune-failures --rejected-out "$RUNNER_TEMP/rejected.md"
+          attempts=$(jq -r '.attempts' <<< "$rec")
+          if [ "$(jq -r '.parked' <<< "$rec")" = "true" ]; then
+            echo "verb=parked" >> "$GITHUB_OUTPUT"
+            echo "### \`$BRANCH\` parked at ${HEAD_SHA:0:7} ($(jq -r '.reason' <<< "$rec"); attempt $attempts): kept, skipped until it is pushed again (or named in a manual run)" \
+              >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "verb=failed (attempt $attempts)" >> "$GITHUB_OUTPUT"
+            echo "### \`$BRANCH\` failed at ${HEAD_SHA:0:7}, not for its content: attempt $attempts of 5 counted; the next scheduled run retries" \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Save
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERB: ${{ steps.record.outputs.verb }}
+        run: |
+          bash tools/save_state.sh "$(printf 'Accept: %s %s at %s\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>' "$BRANCH" "$VERB" "${HEAD_SHA:0:7}")"
+
+      - name: Issue
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          if [ -s "$RUNNER_TEMP/rejected.md" ]; then
+            bash tools/upsert_issue.sh "Orange Juice: writer branch rejected" "$RUNNER_TEMP/rejected.md"
+          fi

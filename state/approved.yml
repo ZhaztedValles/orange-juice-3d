@@ -1,0 +1,4 @@
+# Videos allowed to post while config.yml has require_approval: true. Add an id after you have watched its render:
+#   approved: [001-some-title]
+# Posting takes the lowest approved id that is in the queue. Never list the 000-bridge template.
+approved: []

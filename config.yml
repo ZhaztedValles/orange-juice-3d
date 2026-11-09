@@ -1,0 +1,16 @@
+# Orange Juice Productions: posting settings. Read by autopilot/publish.py (and by render.yml for `paused`).
+# Posting is triggered by cron-job.org at each slot; GitHub's own cron in .github/workflows/post.yml is the backup and
+# must list a time inside every slot's window (a test checks this when you change `slots`).
+paused: false
+timezone: Asia/Manila
+slots: ["19:00"]            # one post per slot; later ["12:00", "19:00"]
+slot_window_minutes: 90     # a run within 90 min after a slot may post for that slot
+require_approval: true      # monitored launch: only ids listed in state/approved.yml post
+youtube:
+  enabled: true
+  privacy: public
+  made_for_kids: false
+  language: en
+  category_id: "27"
+  contains_synthetic_media: false
+  description_footer: "Strange true stories, animated. Follow Orange Juice Productions for more."
