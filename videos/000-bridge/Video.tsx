@@ -20,7 +20,9 @@ import { GradeEffect, GRADES, GRADE_STRENGTH, gradeFor } from "../../src/engine/
 import { Kit } from "../../src/engine/build";
 import { TOTAL, FLASH_AT, SHOTS, layersAt, dofAt } from "./story";
 
-export const FRAMES = TOTAL;
+// A number literal: audio/spec.py reads it with a regex. Must equal the story length.
+export const FRAMES = 2025;
+if (FRAMES !== TOTAL) throw new Error(`FRAMES ${FRAMES} != story TOTAL ${TOTAL}`);
 
 /** A/B switches for test stills only (Remotion inputProps `{ post: { ink: false, ... } }`); everything is on by default. */
 type PostToggles = { ink: boolean; lens: boolean; pre: boolean; bloom: boolean; grade: boolean; grain: boolean };

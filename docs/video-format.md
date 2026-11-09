@@ -9,9 +9,11 @@ entry with the id `oj-<id>`, 1080x1920 at 30 fps.
 
 | File | Required | Contents |
 |---|---|---|
-| `Video.tsx` | yes | `export const FRAMES: number` (duration at 30 fps) and `export default` a `React.FC` with no props. |
+| `Video.tsx` | yes | `export const FRAMES = <integer literal>;` (duration at 30 fps; `audio/spec.py` reads it with the regex `export const FRAMES\s*=\s*(\d+)`) and `export default` a `React.FC` with no props. |
 | `meta.yml` | yes | `title`, `template` (true = never queued or posted), `description`, `tags`. |
 | `words.json` | no | `Word[]` (`{ w, s, e }`, seconds) from `src/engine/captions.ts`; the registry imports it when present. |
+| `voice.wav` | no | Narration from `tools/voice.py` (mono). |
+| `audio.json` | no | Score sections and SFX events for `audio/build_mix.py` (see below). |
 | anything else | no | The video's own modules (story timeline, world, cast, town...). They import the engine from `../../src/engine/`. |
 
 Rules:
@@ -21,6 +23,52 @@ Rules:
   `public/kenney/` by `scripts/fetch-kenney.mjs` and never committed.
 - Engine modules never import from a video folder. When an engine module needs a value that differs per video, it
   takes it as a parameter (default: the bridge template's value).
+
+## `audio.json`
+
+`python audio/build_mix.py videos/<id> out/<id>` turns `voice.wav` + `words.json` + `audio.json` into the soundtrack:
+`mix.wav` (48 kHz stereo 24-bit, exactly `round(FRAMES / 30 * 48000)` samples), `stem_voice.wav`, `stem_music.wav`,
+`stem_sfx.wav` (32-bit float, master gain applied, before the limiter) and `mix_report.json`
+`{lufs, true_peak_db, samples}`. It runs `audio/spec.py`'s `validate` first and exits 1 listing the problems.
+
+```json
+{
+  "music": [ {"from": 0.0, "to": 4.2, "mood": "hook"}, {"from": 4.2, "to": 30.0, "mood": "playful"},
+             {"from": 30.0, "to": 34.6, "mood": "tension"}, {"from": 34.6, "to": 37.5, "mood": "none"},
+             {"from": 37.5, "to": 67.5, "mood": "warm"} ],
+  "key": "Bb", "bpm": 120,
+  "sfx": [ {"t": 34.62, "kind": "bolt_snap", "gain_db": 0, "pan": 0.0},
+           {"t": 36.4, "kind": "splash_big", "gain_db": -2, "pan": -0.2},
+           {"t": 0.0, "kind": "breeze", "dur": 8.0, "gain_db": -10} ]
+}
+```
+
+Rules (`DUR = FRAMES / 30`):
+- `music` sections cover 0..DUR with no gaps or overlaps. `mood` is one of `hook`, `playful`, `march`, `warm`,
+  `tension`, `mystery`, `sad`, `none` (silence).
+- `key`: `C C# Db D D# Eb E F F# Gb G G# Ab A A# Bb B` (major; the minor moods use its relative minor).
+  `bpm`: 60..180.
+- `sfx` events: `t` in [0, DUR); `kind` from the list below; `dur` (> 0) is required for the kinds marked (dur) and not
+  allowed for the others; `gain_db` in [-30, 6] (default 0); `pan` in [-1, 1] (default 0). No other fields: the rng
+  (seeded with the event's index) and `dur` are the only arguments passed.
+- SFX kinds (`audio.spec.SFX_KINDS`: the public functions of `audio/sfx_gen.py` whose other parameters all have
+  defaults): `applause` (dur), `bird_chirps` (dur), `bolt_snap`, `bolt_strain` (dur), `boot`, `breeze` (dur),
+  `chain_groan` (dur), `chain_whip`, `clink` (dur), `column_stomp`, `creak` (dur), `crickets` (dur),
+  `flag_flutter` (dur), `hammer_hit`, `oof`, `push_thump`, `rattle` (dur), `splash_big`, `stroll_step`,
+  `swing_squeak`, `timber_tear` (dur), `water_bed` (dur), `whoa` (dur), `whoosh` (dur), `wood_crack`.
+  A sound running past the end of the video is cut off.
+
+Moods (`audio/score.py`, all notes generated from a seed = the video number, on `instruments.py` voices):
+`hook` glock motif + snare pickup (2 bars), `playful` pluck bass on 1 and 3 + glock tune on I-V-vi-IV, `march`
+oompah tuba / horns + snare + fife tune, `warm` pad + vibes arpeggio, `tension` minor pad + timpani on every beat
+with a crescendo, `mystery` tremolo vibes + low pad (sparse), `sad` slow music box + pad, `none` silence. Each section
+starts on its own downbeat and fades out over 0.25 s past its end (the crossfade); the score goes through a small
+room (rt60 0.6 s).
+
+Mix: with the voice's integrated loudness `Lv`, music is set to `Lv - 15` LUFS integrated (-18 + 3 dB) and ducked
+-3 dB while words are spoken (0.08 s before to 0.12 s after each word), SFX are summed and set to `Lv - 26`
+(-20 - 6 dB), the voice is untouched. One master gain brings the sum to -14.0 LUFS integrated, then a true-peak
+limiter (ceiling -1.2 dBTP) keeps it at or below -1 dBTP.
 
 ## Engine modules
 
