@@ -222,8 +222,6 @@ jobs:
       TEMPLATE: ${{ needs.plan.outputs.template }}
       SOURCE: ${{ needs.plan.outputs.source }}
       QUEUE: ${{ inputs.queue }}
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -316,6 +314,9 @@ jobs:
       - name: Queue
         id: queue
         if: always() && steps.decide.outputs.status == 'queued'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh release create queue --title queue --notes "Render queue" || true
           cp final.mp4 "$VIDEO.mp4"
@@ -348,6 +349,8 @@ jobs:
       - name: Save render state
         id: save
         if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           bash tools/save_state.sh "Render: $VIDEO ${{ steps.decide.outputs.status }}"
 
@@ -356,6 +359,9 @@ jobs:
         if: >-
           always() && inputs.video == '' && steps.save.outcome == 'success' &&
           (steps.queue.outcome == 'success' || steps.hold.outcome == 'success')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: gh workflow run render.yml --ref main
 
       - name: Fail the run when held

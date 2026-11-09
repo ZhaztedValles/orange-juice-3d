@@ -181,3 +181,11 @@ def test_check_pieces_missing_and_extra_files(tmp_path, monkeypatch):
     (tmp_path / "piece_009.mp4").write_bytes(b"")
     ps = render_plan.check_pieces(tmp_path, cs)
     assert any("piece_001.mp4 missing" in p for p in ps) and any("piece_009.mp4" in p and "unexpected" in p for p in ps)
+
+
+def test_plan_fails_without_source_sha(cli, capsys, monkeypatch):
+    monkeypatch.setattr(render_plan, "folder_sha", lambda folder: None)
+    with pytest.raises(ValueError, match="source"):
+        render_plan.plan()
+    assert render_plan.main(["--video", "001-alpha"]) == 1
+    assert "no last-commit sha" in capsys.readouterr().err

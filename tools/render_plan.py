@@ -101,7 +101,11 @@ def plan(video=None):
         return {"video": None, "frames": 0, "template": False, "source": None, "matrix": {"include": []}}
     folder = VIDEOS / video
     frames = spec.frames(folder)
-    return {"video": video, "frames": frames, "template": video_check.is_template(folder), "source": folder_sha(folder),
+    source = folder_sha(folder)
+    if not source:      # every state this run writes records `source`; a source-less hold would never clear correctly
+        raise ValueError(f"{video}: no last-commit sha for videos/{video} (uncommitted folder, or a shallow checkout "
+                         f"without fetch-depth 0), so the render state's source would be empty")
+    return {"video": video, "frames": frames, "template": video_check.is_template(folder), "source": source,
             "matrix": {"include": chunks(frames)}}
 
 
