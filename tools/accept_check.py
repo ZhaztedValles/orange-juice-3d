@@ -14,8 +14,11 @@ Usage:
       "" when none. A branch whose diff vs HEAD (main) touches .github/ is never picked (tripped: the workflow opens an
       issue; --tripwire-out writes its body); a branch that failed at its current sha (state/accept/<slug>.json) is
       skipped until it is pushed again, unless --only names it (a manual re-run).
-  python tools/accept_check.py --record-failure BRANCH SHA
-      writes state/accept/<slug>.json, so --find skips BRANCH until its sha changes.
+  python tools/accept_check.py --record-failure BRANCH SHA [REASON]
+      writes state/accept/<slug>.json, so --find skips BRANCH until its sha changes (content rejections only).
+  python tools/accept_check.py --prune-failures [--rejected-out FILE]
+      removes the state/accept records of branches that no longer exist on origin; --rejected-out writes the body of
+      the "writer branch rejected" issue from the records that remain ("" when none).
 
 The CODE comes from the copy of this file that is run (CODE_ROOT: the workflow runs main's trusted copy from a git
 worktree, never the branch's); the DATA (the diff, the folders, the story files) from the repository in the current
@@ -83,18 +86,61 @@ def pick_branch(branches, failed, tripped, only=None):
     return None
 
 
+def log_paths_z(text):
+    """unique paths, in order, from `git log --format= --name-only -z` (every commit's touched paths)"""
+    out = []
+    for part in text.split("\0"):
+        part = part.strip("\n")
+        if part and part not in out:
+            out.append(part)
+    return out
+
+
+def _literal(x):
+    """x as a JSON string that is inert in GitHub markdown inside a fence: no raw newline, no backtick"""
+    return json.dumps(str(x)).replace("`", "\\u0060")
+
+
 def tripwire_body(tripped):
-    lines = ["A writer branch changed files under `.github/`. Accept never processes such a branch; check it by hand, "
-             "then delete it (and review recent workflow runs).", ""]
+    lines = ["A writer branch changed files under .github/ (in its diff or in any of its commits). Accept never "
+             "processes such a branch; check it by hand, then delete it (and review recent workflow runs).", "", "```"]
     for t in tripped:
-        lines += [f"- `{t['branch']}` at {t['sha']}:"] + [f"  - `{p}`" for p in t["paths"]]
-    return "\n".join(lines) + "\n"
+        lines.append(f"{_literal(t['branch'])} at {_literal(t['sha'])}:")
+        lines += [f"  {_literal(p)}" for p in t["paths"]]
+    return "\n".join(lines + ["```"]) + "\n"
 
 
-def record_failure(state_dir, branch, sha):
+def rejected_body(records):
+    if not records:
+        return ""
+    lines = ["Accept rejected these writer branches (content: path rules, merge conflict, video_check, tsc, tests or "
+             "smoke stills). Each stays parked until it is pushed again or named in a manual Accept run.", "", "```"]
+    lines += [f"{_literal(r.get('branch'))} at {_literal(r.get('sha'))}: {_literal(r.get('reason') or 'rejected')}"
+              for r in records]
+    return "\n".join(lines + ["```"]) + "\n"
+
+
+def stale_records(failures, live_branches):
+    """slugs of failure records whose branch is gone"""
+    return sorted(s for s in failures if f"claude/{s}" not in live_branches)
+
+
+def record_failure(state_dir, branch, sha, reason=""):
     p = Path(state_dir) / "accept" / f"{slug(branch)}.json"
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"branch": branch, "sha": sha}, indent=1) + "\n", encoding="utf-8")
+    p.write_text(json.dumps({"branch": branch, "sha": sha, "reason": reason}, indent=1) + "\n", encoding="utf-8")
+
+
+def load_records(state_dir):
+    out = []
+    for p in sorted((Path(state_dir) / "accept").glob("*.json")):
+        try:
+            r = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if isinstance(r, dict):
+            out.append(r)
+    return out
 
 
 def load_failures(state_dir):
@@ -168,18 +214,27 @@ def changes(base, head, repo):
     return parse_name_status_z(_git("diff", "-z", "--name-status", "--no-renames", f"{base}...{head}", repo=repo))
 
 
-def find(repo, only=None):
-    """{"branch", "sha", "slug", "tripped"} (see the module doc); fetches every writer branch from origin"""
-    out = _git("ls-remote", "--heads", "origin", repo=repo)
-    branches, tripped = [], []
-    for ln in out.splitlines():
+def remote_branches(repo):
+    """the writer branch names on origin"""
+    out = []
+    for ln in _git("ls-remote", "--heads", "origin", repo=repo).splitlines():
         sha, _, ref = ln.partition("\t")
         name = ref[len("refs/heads/"):] if ref.startswith("refs/heads/") else ""
-        if not branch_ok(name) or not re.fullmatch(r"[0-9a-f]{40}", sha):
-            continue
+        if branch_ok(name) and re.fullmatch(r"[0-9a-f]{40}", sha):
+            out.append(name)
+    return out
+
+
+def find(repo, only=None):
+    """{"branch", "sha", "slug", "tripped"} (see the module doc); fetches every writer branch from origin"""
+    branches, tripped = [], []
+    for name in sorted(remote_branches(repo)):
         _git("fetch", "-q", "--no-tags", "origin", f"+refs/heads/{name}:refs/remotes/origin/{name}", repo=repo)
         sha = _git("rev-parse", f"refs/remotes/origin/{name}^{{commit}}", repo=repo).strip()
-        paths = workflow_paths(changes("HEAD", sha, repo))
+        base = _git("merge-base", "HEAD", sha, repo=repo).strip()
+        touched = [("?", p) for p in log_paths_z(_git("log", "--format=", "--name-only", "-z", f"{base}..{sha}",
+                                                         repo=repo))]
+        paths = list(dict.fromkeys(workflow_paths(changes("HEAD", sha, repo)) + workflow_paths(touched)))
         if paths:
             tripped.append({"branch": name, "sha": sha, "paths": paths})
         date = int(_git("log", "-1", "--format=%ct", sha, repo=repo).strip())
@@ -219,8 +274,16 @@ def main(argv):
         ok = branch_ok(argv[1])
         print("ok" if ok else f"not a writer branch name: {argv[1]!r} (want claude/oj-[A-Za-z0-9._-]+)")
         return 0 if ok else 1
-    if argv[:1] == ["--record-failure"] and len(argv) == 3:
-        record_failure(_repo() / "state", argv[1], argv[2])
+    if argv[:1] == ["--record-failure"] and len(argv) in (3, 4):
+        record_failure(_repo() / "state", argv[1], argv[2], argv[3] if len(argv) == 4 else "")
+        return 0
+    if argv[:1] == ["--prune-failures"] and len(argv) in (1, 3) and argv[1:2] in ([], ["--rejected-out"]):
+        state = _repo() / "state"
+        for s_ in stale_records(load_failures(state), set(remote_branches(_repo()))):
+            (state / "accept" / f"{s_}.json").unlink()
+            print(f"pruned state/accept/{s_}.json")
+        if len(argv) == 3:
+            Path(argv[2]).write_text(rejected_body(load_records(state)), encoding="utf-8")
         return 0
     if argv[:1] == ["--find"]:
         opts = dict(zip(argv[1::2], argv[2::2]))

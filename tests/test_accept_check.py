@@ -232,12 +232,50 @@ def test_pick_ignores_bad_names():
 
 def test_tripwire_body_names_branches_and_paths():
     body = accept_check.tripwire_body([{"branch": "claude/oj-x", "sha": "a" * 40, "paths": [".github/workflows/e.yml"]}])
-    assert "claude/oj-x" in body and ".github/workflows/e.yml" in body and "a" * 40 in body
+    assert "claude/oj-x" in body and '".github/workflows/e.yml"' in body and "a" * 40 in body
+
+
+def _outside_fences(body):
+    out, fenced = [], False
+    for ln in body.split("\n"):
+        if ln.startswith("```"):
+            fenced = not fenced
+        elif not fenced:
+            out.append(ln)
+    assert not fenced, "unbalanced fence"
+    return "\n".join(out)
+
+
+def test_tripwire_body_escapes_hostile_paths():
+    evil = ".github/x\n```\n@someone `hi` <b>"
+    body = accept_check.tripwire_body([{"branch": "claude/oj-x", "sha": "a" * 40, "paths": [evil]}])
+    assert "@someone" not in _outside_fences(body)
+    assert body.count("```") % 2 == 0 and "`hi`" not in body
+    assert "\\n" in body                   # the newline is a JSON escape, not a line break
+    assert len([ln for ln in body.split("\n") if "@someone" in ln]) == 1
+
+
+def test_rejected_body_lists_records_in_a_fence():
+    body = accept_check.rejected_body([{"branch": "claude/oj-x", "sha": "a" * 40, "reason": "pytest @x"}])
+    assert "claude/oj-x" in body and "a" * 40 in body
+    assert "@x" not in _outside_fences(body)
+    assert accept_check.rejected_body([]) == ""
+
+
+def test_log_paths_z():
+    assert accept_check.log_paths_z("\n.github/workflows/e.yml\0\0\n.github/workflows/e.yml\0a b\0") == \
+        [".github/workflows/e.yml", "a b"]
+    assert accept_check.log_paths_z("") == []
+
+
+def test_stale_records():
+    assert accept_check.stale_records({"oj-a": "1", "oj-b": "2"}, {"claude/oj-a", "claude/oj-c"}) == ["oj-b"]
 
 
 def test_record_failure_roundtrip(tmp_path):
-    accept_check.record_failure(tmp_path, "claude/oj-2026-11-09", "a" * 40)
+    accept_check.record_failure(tmp_path, "claude/oj-2026-11-09", "a" * 40, "pytest")
     assert accept_check.load_failures(tmp_path) == {"oj-2026-11-09": "a" * 40}
+    assert accept_check.load_records(tmp_path) == [{"branch": "claude/oj-2026-11-09", "sha": "a" * 40, "reason": "pytest"}]
     with pytest.raises(ValueError):
         accept_check.record_failure(tmp_path, "claude/../x", "a" * 40)
 
@@ -269,6 +307,17 @@ def test_cli_find(tmp_path):
         return _git(ws, "rev-parse", name).strip()
 
     evil = branch("claude/oj-evil", ".github/workflows/e.yml", 1000)
+    # add-then-remove: the branch's diff vs main is clean, but one of its commits touched .github/
+    branch("claude/oj-sneaky", ".github/workflows/s.yml", 1500)
+    _git(ws, "checkout", "-q", "claude/oj-sneaky")
+    _git(ws, "rm", "-q", ".github/workflows/s.yml")
+    (ws / "stories").mkdir(exist_ok=True)
+    (ws / "stories" / "ledger.yml").write_text("y")
+    _git(ws, "add", "-A")
+    _git(ws, "commit", "-q", "-m", "hide")
+    _git(ws, "push", "-q", "origin", "claude/oj-sneaky")
+    sneaky = _git(ws, "rev-parse", "HEAD").strip()
+    _git(ws, "checkout", "-q", "main")
     failed = branch("claude/oj-failed", "stories/ledger.yml", 2000)
     branch("claude/oj-good", "stories/banned.yml", 3000)
     branch("feature/other", "stories/banned.yml", 500)
@@ -281,12 +330,35 @@ def test_cli_find(tmp_path):
     import json
     out = json.loads(r.stdout)
     assert out["branch"] == "claude/oj-good" and len(out["sha"]) == 40 and out["slug"] == "oj-good"
-    assert out["tripped"] == [{"branch": "claude/oj-evil", "sha": evil, "paths": [".github/workflows/e.yml"]}]
+    assert out["tripped"] == [{"branch": "claude/oj-evil", "sha": evil, "paths": [".github/workflows/e.yml"]},
+                              {"branch": "claude/oj-sneaky", "sha": sneaky, "paths": [".github/workflows/s.yml"]}]
     r = subprocess.run(cli + ["--only", "claude/oj-failed"], cwd=ws, capture_output=True, text=True)
     assert json.loads(r.stdout)["branch"] == "claude/oj-failed"
     r = subprocess.run(cli + ["--only", "claude/oj-evil"], cwd=ws, capture_output=True, text=True)
     assert json.loads(r.stdout)["branch"] == ""
     # the CLI records a failure in the repo's state/: the good branch is then skipped too, until it changes
-    rec = [sys.executable, str(ROOT / "tools" / "accept_check.py"), "--record-failure", "claude/oj-good", out["sha"]]
+    rec = [sys.executable, str(ROOT / "tools" / "accept_check.py"), "--record-failure", "claude/oj-good", out["sha"], "tsc"]
     assert subprocess.run(rec, cwd=ws, capture_output=True).returncode == 0
     assert json.loads(subprocess.run(cli, cwd=ws, capture_output=True, text=True).stdout)["branch"] == ""
+
+
+def test_cli_prune_and_rejected_body(tmp_path):
+    origin, ws = tmp_path / "origin.git", tmp_path / "ws"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(origin)], check=True)
+    subprocess.run(["git", "clone", "-q", str(origin), str(ws)], check=True, capture_output=True)
+    _git(ws, "config", "user.email", "t@example.com")
+    _git(ws, "config", "user.name", "t")
+    _git(ws, "checkout", "-q", "-b", "main")
+    (ws / "README.md").write_text("x")
+    _git(ws, "add", "-A")
+    _git(ws, "commit", "-q", "-m", "main")
+    _git(ws, "push", "-q", "origin", "main", "main:refs/heads/claude/oj-live")
+    accept_check.record_failure(ws / "state", "claude/oj-live", "a" * 40, "pytest")
+    accept_check.record_failure(ws / "state", "claude/oj-gone", "b" * 40, "tsc")
+    cli = [sys.executable, str(ROOT / "tools" / "accept_check.py")]
+    r = subprocess.run(cli + ["--prune-failures", "--rejected-out", str(tmp_path / "rej.md")], cwd=ws,
+                       capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert sorted(p.name for p in (ws / "state" / "accept").iterdir()) == ["oj-live.json"]
+    body = (tmp_path / "rej.md").read_text(encoding="utf-8")
+    assert "claude/oj-live" in body and "claude/oj-gone" not in body
