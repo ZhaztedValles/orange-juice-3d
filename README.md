@@ -39,10 +39,9 @@ range on an ubuntu runner and uploads the mp4 and a still.
 - `scripts/fetch-kenney.mjs`: fetch the Kenney models (never committed).
 - `scripts/gen-registry.mjs`: write `src/videos.generated.ts` from `videos/*/` (`--check` exits 1 when stale).
 - `scripts/stills.mjs`: render stills.
-- `scripts/bridge_shots.py`: write `out/bridge/shots.json` from `story.ts` for `short_qa.py`.
 - `scripts/short_qa.py`: frame-by-frame QA of a final render (black, white, frozen, pop frames, loudness).
 - `scripts/sbs_sheet.py`: side-by-side review sheets.
-- `scripts/bridge_merge.py`: merge look-pass sandboxes back into the Milestone 1 `src/videos/bridge/` layout (obsolete since the engine split).
+- `tools/video_check.py`: `python tools/video_check.py videos/<id> [...]` checks a video folder against the folder contract in `docs/video-format.md` (prints `ok <id>` or the problems, exits 1).
 
 ## Credits
 - 3D models: [Kenney](https://kenney.nl) — Nature Kit and Fantasy Town Kit, licensed

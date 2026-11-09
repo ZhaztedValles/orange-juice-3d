@@ -1,22 +1,71 @@
 # Video format
 
-Every video is a folder `videos/<id>/`, where `<id>` matches `^\d{3}-[a-z0-9-]+$` (e.g. `000-bridge`). The number
+Every video is a folder `videos/<id>/`, where `<id>` matches `^\d{3}-[a-z0-9-]{3,50}$` (e.g. `000-bridge`). The number
 is unique across folders. `npm run gen` scans the folders and writes the registry `src/videos.generated.ts`
 (`npm run gen -- --check` exits 1 when it is stale; CI runs that). `src/Root.tsx` registers one composition per
 entry with the id `oj-<id>`, 1080x1920 at 30 fps.
 
-## Files in a video folder
+## Folder contract
 
-| File | Required | Contents |
-|---|---|---|
-| `Video.tsx` | yes | `export const FRAMES = <integer literal>;` (duration at 30 fps; `audio/spec.py` reads it with the regex `export const FRAMES\s*=\s*(\d+)\s*;`, so no expressions) and `export default` a `React.FC` with no props. |
-| `meta.yml` | yes | `title`, `template` (true = never queued or posted), `description`, `tags`. |
-| `words.json` | for the mix | `Word[]` (`{ w, s, e }`, seconds) from `src/engine/captions.ts`; the registry imports it when present. |
-| `voice.wav` | for the mix | Narration from `tools/voice.py` (mono). `audio/spec.py` reports it (and `words.json`) missing. |
-| `audio.json` | no | Score sections and SFX events for `audio/build_mix.py` (see below). |
-| anything else | no | The video's own modules (story timeline, world, cast, town...). They import the engine from `../../src/engine/`. |
+`python tools/video_check.py videos/<id> [...]` is the gate: it prints `ok <id>` or one `<id>: <problem>` line per problem
+and exits 1. A folder that does not pass is not merged or rendered. The writer may only add or change files inside
+`videos/<NNN>-<slug>/`. Everything below is checked.
 
-Rules:
+### Files
+
+The folder name matches `^\d{3}-[a-z0-9-]{3,50}$`. These seven files are required:
+
+| File | Contents |
+|---|---|
+| `SCRIPT.md` | The facts and the narration between `<!-- narration -->` and `<!-- /narration -->` (`tools/script_md.py`). Numbers are written as words (no digits). |
+| `meta.yml` | See "meta.yml" below. |
+| `Video.tsx` | `export const FRAMES = <integer literal>;` (duration at 30 fps; `audio/spec.py` reads it with the regex `export const FRAMES\s*=\s*(\d+)\s*;`, so no expressions) and `export default` a `React.FC` with no props. |
+| `voice.wav` | Narration from `tools/voice.py` (mono, 24 kHz or 48 kHz). |
+| `words.json` | `Word[]` (`{ w, s, e }`, seconds) from `tools/voice.py`; the registry imports it. |
+| `audio.json` | Score sections and SFX events for `audio/build_mix.py` (see "`audio.json`" below). |
+| `shots.json` | Shot frame ranges for `scripts/short_qa.py` (see "`shots.json`" below). |
+
+Any other file is the video's own code or data: `.ts`, `.tsx`, `.json` modules (story timeline, world, cast, town...).
+Only these extensions are allowed: `.ts .tsx .json .md .yml .wav`. Subdirectories (and symbolic links) are not allowed.
+
+### Rules
+
+- `meta.yml`:
+  - `title`: a string of 1-100 characters;
+  - `description`: a string of 1-4500 characters;
+  - `tags`: a list of strings, 500 characters or fewer in total (may be empty);
+  - `sources`: a list of at least 2 `http(s)` URLs (templates are exempt);
+  - `template`: `true` or `false`, optional. `true` means never queued or posted; templates are exempt from the 55 s
+    minimum and from `sources`.
+- `FRAMES` is 1650-2100 (55-70 s at 30 fps). A template may be shorter than 55 s, never longer than 70 s.
+- `words.json`: a list of `{w, s, e}` (text and seconds) with `s < e`, `s` non-decreasing, and the last `e` no later
+  than `FRAMES / 30`. The words, taken in order, equal the words of the narration after lower-casing and removing every
+  character that is not a letter, digit, apostrophe or hyphen (apostrophes and hyphens at the edges of a word are
+  trimmed too); words made only of punctuation are dropped on both sides. `tools/voice.py` produces this.
+- `voice.wav`: 24000 Hz or 48000 Hz, and no longer than `FRAMES / 30` seconds.
+- `shots.json`: `{"shots": [{"id": 1, "a": 0, "b": 130}, ...], "xfade": [[1131, 1137], ...], "planned": [[497, 497], ...]}`
+  (`id`, `a`, `b` are integers; `xfade` / `planned` are optional lists of `[from, to]` frame pairs, plus an optional
+  `"flash": [from, to]`; the format `scripts/short_qa.py` reads). Sorted by `a`, the shots start at 0, each `b` equals the
+  next `a`, the last `b` equals `FRAMES`; ids are unique; every shot is at least 30 frames long.
+- `audio.json` passes `audio.spec.validate` (see below). Missing `voice.wav` / `words.json` are reported once, as missing files.
+- Sizes: `voice.wav` at most 12 MB, every other file at most 400 KB, the whole folder at most 15 MB.
+
+### Import sandbox
+
+The folder's code is rendered on GitHub from a public repo, so it may only import:
+
+- `react`, `three`, `remotion`, `@remotion/three`, `@react-three/fiber`, `@react-three/postprocessing`, `postprocessing`;
+- `three/examples/jsm/<path>` (no `..`);
+- `../../src/engine/<module>` where `<module>` is a file in `src/engine/` (no extension; see "Engine modules");
+- `./<file>`: a `.ts` / `.tsx` / `.json` file of the same folder (with or without extension), and `./words.json`.
+
+Every `from "..."`, `export ... from "..."` and `import "..."` specifier in every `.ts` / `.tsx` file is checked.
+These tokens are forbidden anywhere in that code, comments and string literals included: `fetch(`, `XMLHttpRequest`,
+`eval(`, `new Function`, `require(`, `process.`, `import(`, `child_process`, and the `fs` module (`"fs"`, `"node:fs"`,
+`"fs/promises"`, ...). Do not write them even in a comment.
+
+### Other rules
+
 - Output 1080x1920, 30 fps. Every pixel-sized parameter is specified at 1080x1920 and scales with the output height.
 - Film grain stays off.
 - Kenney CC0 models are loaded with `loadKenney(names)` / `staticFile("kenney/<name>.glb")`; they are fetched into
