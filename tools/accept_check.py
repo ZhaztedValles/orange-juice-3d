@@ -15,7 +15,10 @@ Usage:
       issue; --tripwire-out writes its body); a branch that failed at its current sha (state/accept/<slug>.json) is
       skipped until it is pushed again, unless --only names it (a manual re-run).
   python tools/accept_check.py --record-failure BRANCH SHA [REASON]
-      writes state/accept/<slug>.json, so --find skips BRANCH until its sha changes (content rejections only).
+      a content rejection: parks BRANCH in state/accept/<slug>.json, so --find skips it until its sha changes.
+  python tools/accept_check.py --record-infra BRANCH SHA
+      a non-content failure: counts one more attempt for this sha (a new sha starts at 1) and parks the branch once
+      attempts > 5 ("repeated infrastructure failures (check logs)"); prints the record as JSON.
   python tools/accept_check.py --prune-failures [--rejected-out FILE]
       removes the state/accept records of branches that no longer exist on origin; --rejected-out writes the body of
       the "writer branch rejected" issue from the records that remain ("" when none).
@@ -127,10 +130,68 @@ def stale_records(failures, live_branches):
     return sorted(s for s in failures if f"claude/{s}" not in live_branches)
 
 
-def record_failure(state_dir, branch, sha, reason=""):
-    p = Path(state_dir) / "accept" / f"{slug(branch)}.json"
+MAX_INFRA_ATTEMPTS = 5
+INFRA_PARKED = "repeated infrastructure failures (check logs)"
+
+
+def _record_path(state_dir, branch):
+    return Path(state_dir) / "accept" / f"{slug(branch)}.json"
+
+
+def _read_record(state_dir, branch):
+    try:
+        r = json.loads(_record_path(state_dir, branch).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return r if isinstance(r, dict) else {}
+
+
+def _attempts_so_far(state_dir, branch, sha):
+    r = _read_record(state_dir, branch)
+    try:
+        return int(r.get("attempts", 0)) if r.get("sha") == sha else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def _write_record(state_dir, branch, sha, attempts, parked, reason):
+    rec = {"branch": branch, "sha": sha, "attempts": attempts, "parked": parked, "reason": reason}
+    p = _record_path(state_dir, branch)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps({"branch": branch, "sha": sha, "reason": reason}, indent=1) + "\n", encoding="utf-8")
+    p.write_text(json.dumps(rec, indent=1) + "\n", encoding="utf-8")
+    return rec
+
+
+def record_failure(state_dir, branch, sha, reason=""):
+    """a content rejection: park the branch at this sha (counting the attempt)"""
+    n = _attempts_so_far(state_dir, branch, sha) + 1
+    return _write_record(state_dir, branch, sha, n, True, reason or "rejected")
+
+
+def record_infra_failure(state_dir, branch, sha):
+    """a non-content failure: one more attempt for this sha; parked once attempts > MAX_INFRA_ATTEMPTS"""
+    n = _attempts_so_far(state_dir, branch, sha) + 1
+    parked = n > MAX_INFRA_ATTEMPTS
+    return _write_record(state_dir, branch, sha, n, parked, INFRA_PARKED if parked else "infrastructure failure")
+
+
+def next_attempt(state_dir, branch, sha):
+    """the attempt number a run on (branch, sha) is"""
+    return _attempts_so_far(state_dir, branch, sha) + 1
+
+
+def _is_parked(r):
+    return r.get("parked", True) is not False        # records without the flag (older format) count as parked
+
+
+def parked_records(state_dir):
+    return [r for r in load_records(state_dir) if _is_parked(r)]
+
+
+def load_parked(state_dir):
+    """{slug: sha} of the parked records (find skips these branches at that sha)"""
+    return {slug(r["branch"]): r.get("sha") for r in parked_records(state_dir)
+            if isinstance(r.get("branch"), str) and branch_ok(r["branch"])}
 
 
 def load_records(state_dir):
@@ -247,9 +308,9 @@ def find(repo, only=None):
             tripped.append({"branch": name, "sha": sha, "paths": paths})
         date = int(_git("log", "-1", "--format=%ct", sha, repo=repo).strip())
         branches.append({"name": name, "sha": sha, "date": date})
-    b = pick_branch(branches, load_failures(repo / "state"), {t["branch"] for t in tripped}, only=only)
+    b = pick_branch(branches, load_parked(repo / "state"), {t["branch"] for t in tripped}, only=only)
     return {"branch": b["name"] if b else "", "sha": b["sha"] if b else "", "slug": slug(b["name"]) if b else "",
-            "tripped": tripped}
+            "attempt": next_attempt(repo / "state", b["name"], b["sha"]) if b else 0, "tripped": tripped}
 
 
 def _ls(base, path, repo, dirs):
@@ -283,7 +344,10 @@ def main(argv):
         print("ok" if ok else f"not a writer branch name: {argv[1]!r} (want claude/oj-[A-Za-z0-9._-]+)")
         return 0 if ok else 1
     if argv[:1] == ["--record-failure"] and len(argv) in (3, 4):
-        record_failure(_repo() / "state", argv[1], argv[2], argv[3] if len(argv) == 4 else "")
+        print(json.dumps(record_failure(_repo() / "state", argv[1], argv[2], argv[3] if len(argv) == 4 else "")))
+        return 0
+    if argv[:1] == ["--record-infra"] and len(argv) == 3:
+        print(json.dumps(record_infra_failure(_repo() / "state", argv[1], argv[2])))
         return 0
     if argv[:1] == ["--prune-failures"] and len(argv) in (1, 3) and argv[1:2] in ([], ["--rejected-out"]):
         state = _repo() / "state"
@@ -291,7 +355,7 @@ def main(argv):
             (state / "accept" / f"{s_}.json").unlink()
             print(f"pruned state/accept/{s_}.json")
         if len(argv) == 3:
-            Path(argv[2]).write_text(rejected_body(load_records(state)), encoding="utf-8")
+            Path(argv[2]).write_text(rejected_body(parked_records(state)), encoding="utf-8")
         return 0
     if argv[:1] == ["--find"]:
         opts = dict(zip(argv[1::2], argv[2::2]))

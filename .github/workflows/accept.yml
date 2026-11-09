@@ -14,13 +14,14 @@
 #   (render state commits); the trusted check runs again on the actual merge (Python only), the registry is regenerated
 #   with main's scripts/gen-registry.mjs, then commit "Accept <branch>", push main (3 tries), dispatch render.yml, and
 #   last delete the branch (force-with-lease on the sha that was checked).
-# record-failure (contents: write, issues: write) - only for a CONTENT rejection (path rules, merge conflict, the
-#   merged-tree check, registry/tsc, pytest, vitest, smoke stills): the branch is kept and parked in
-#   state/accept/<slug>.json, and the issue "Orange Juice: writer branch rejected" lists the parked branches.
-#   A hang in those steps is a content rejection too (coreutils `timeout` turns it into a failure; step timeouts are
-#   the backstop). Anything else (npm / network / Kenney / apt / job timeouts, main moved outside state/, push
-#   retries exhausted) is not recorded: the next scheduled run retries, and the summaries show the attempt number;
-#   after 5 failed attempts the branch is parked anyway ("repeated infrastructure failures (check logs)").
+# record-failure (contents: write, issues: write) - after any failed run on the branch (check failed or cancelled, or
+#   merge failed or cancelled before main was pushed), state/accept/<slug>.json = {sha, attempts, parked, reason}.
+#   A CONTENT rejection (path rules, merge conflict, the merged-tree check, registry/tsc, pytest, vitest, smoke
+#   stills) parks the branch at once; a hang in those steps is one too (coreutils `timeout -k 30` turns it into a
+#   failure; step timeouts are the backstop). Anything else (npm / network / Kenney / apt / job timeouts or cancels,
+#   main moved outside state/, push retries exhausted) only counts an attempt for that sha and the next scheduled run
+#   retries; once attempts > 5 the branch is parked ("repeated infrastructure failures (check logs)"). find skips only
+#   parked branches at their parked sha, and the issue "Orange Juice: writer branch rejected" lists them.
 #   Some infrastructure faults inside the named steps (the browser / GL inside remotion still, a flaky test on main)
 #   can also park a branch; recover by pushing the branch again or naming it in a manual run's `branch` input.
 #
@@ -64,12 +65,11 @@ jobs:
     permissions:
       contents: read
       issues: write       # the workflow tripwire issue
-      actions: read       # count earlier failed runs (attempt number in the summaries)
     outputs:
       branch: ${{ steps.find.outputs.branch }}
       sha: ${{ steps.find.outputs.sha }}
       slug: ${{ steps.find.outputs.slug }}
-      attempt: ${{ steps.attempt.outputs.attempt }}
+      attempt: ${{ steps.find.outputs.attempt }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -92,11 +92,13 @@ jobs:
           branch=$(jq -r '.branch' <<< "$res")
           sha=$(jq -r '.sha' <<< "$res")
           slug=$(jq -r '.slug' <<< "$res")
+          attempt=$(jq -r '.attempt' <<< "$res")
           if [ -n "$branch" ]; then
-            if [[ ! "$branch" =~ ^claude/oj-[A-Za-z0-9._-]+$ || ! "$sha" =~ ^[0-9a-f]{40}$ || "claude/$slug" != "$branch" ]]; then
+            if [[ ! "$branch" =~ ^claude/oj-[A-Za-z0-9._-]+$ || ! "$sha" =~ ^[0-9a-f]{40}$ || "claude/$slug" != "$branch" ||
+                  ! "$attempt" =~ ^[0-9]+$ ]]; then
               echo "::error::unexpected find result"; exit 1
             fi
-            echo "Accepting $branch at $sha" >> "$GITHUB_STEP_SUMMARY"
+            echo "### Picked \`$branch\` at $sha (attempt $attempt for this sha)" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "No writer branch to accept" >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -104,6 +106,7 @@ jobs:
             echo "branch=$branch"
             echo "sha=$sha"
             echo "slug=$slug"
+            echo "attempt=$attempt"
             echo "tripped=$(jq '.tripped | length' <<< "$res")"
           } >> "$GITHUB_OUTPUT"
 
@@ -117,20 +120,6 @@ jobs:
           echo "::error::$title (not processed): see the issue"
           { echo "### $title"; cat "$RUNNER_TEMP/tripwire.md"; } >> "$GITHUB_STEP_SUMMARY"
           bash tools/upsert_issue.sh "$title" "$RUNNER_TEMP/tripwire.md"
-
-      # Non-content failures are not recorded (the next run simply retries); this counter only goes into the summaries.
-      - name: Attempt number (failed Accept runs since the branch's last commit, approximate)
-        id: attempt
-        if: steps.find.outputs.branch != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          SHA: ${{ steps.find.outputs.sha }}
-        run: |
-          since=$(git log -1 --format=%cI "$SHA")
-          failed=$(gh run list --workflow accept.yml --status failure --created ">=$since" --limit 200 \
-                     --json databaseId --jq length) || failed=0
-          echo "attempt=$((failed + 1))" >> "$GITHUB_OUTPUT"
 
   check:
     needs: find
@@ -226,27 +215,27 @@ jobs:
         id: tsc
         timeout-minutes: 10     # backstop; `timeout` below turns a hang into a failure (= content rejection)
         run: |
-          timeout 120 npm run gen -- --check || { echo "registry out of date (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1; }
-          timeout 420 npx tsc --noEmit || { echo "tsc failed or hung (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1; }
+          timeout -k 30 120 npm run gen -- --check || { echo "registry out of date (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1; }
+          timeout -k 30 420 npx tsc --noEmit || { echo "tsc failed or hung (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1; }
 
       # tests/ is main's (the branch cannot change it); pytest runs before anything executes the branch's TSX
       - name: pytest
         id: pytest
         timeout-minutes: 10
-        run: timeout 540 python -m pytest -q tests || { echo "pytest failed or hung (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1; }
+        run: timeout -k 30 540 python -m pytest -q tests || { echo "pytest failed or hung (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1; }
 
       # from here on the branch's video code runs (vitest imports the registry; the stills render it)
       - name: vitest
         id: vitest
         timeout-minutes: 10
-        run: timeout 540 npx vitest run || { echo "vitest failed or hung (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1; }
+        run: timeout -k 30 540 npx vitest run || { echo "vitest failed or hung (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1; }
 
       - name: Smoke stills
         id: stills
         timeout-minutes: 15     # backstop; all stills share a 14-minute `timeout` budget, so a hang is a failure
         run: |
           mkdir -p "$TMPDIR" smoke
-          deadline=$((SECONDS + 840))
+          deadline=$((SECONDS + 810))
           while read -r id frames; do
             if [[ ! "$id" =~ ^[0-9]{3}-[a-z0-9-]{3,50}$ || ! "$frames" =~ ^[0-9]+$ ]]; then
               echo "bad videos.txt line" | tee -a "$RUNNER_TEMP/problems.txt"; exit 1
@@ -254,7 +243,7 @@ jobs:
             left=$((deadline - SECONDS))
             if [ "$left" -le 0 ]; then echo "smoke stills ran out of time before $id" >> "$RUNNER_TEMP/problems.txt"; exit 1; fi
             echo "oj-$id: frame $((frames / 2)) of $frames"
-            if ! timeout "$left" npx remotion still src/index.ts "oj-$id" "smoke/$id.png" --frame=$((frames / 2)) --scale=0.5 \
+            if ! timeout -k 30 "$left" npx remotion still src/index.ts "oj-$id" "smoke/$id.png" --frame=$((frames / 2)) --scale=0.5 \
                  --gl=swangle --props='{"captions":false}'; then
               echo "smoke still failed or hung for $id (see the step log)" >> "$RUNNER_TEMP/problems.txt"; exit 1
             fi
@@ -304,7 +293,7 @@ jobs:
             elif [ -n "$reason" ]; then
               echo "### \`$BRANCH\` rejected ($reason) - kept and parked until it is pushed again"
             else
-              echo "### Accept check for \`$BRANCH\` failed, not for its content (infrastructure) - attempt $ATTEMPT: from attempt 6 the branch is parked, before that the next scheduled run retries"
+              echo "### Accept check for \`$BRANCH\` failed, not for its content (infrastructure) - attempt $ATTEMPT for this sha: counted; parked after 5, until then the next scheduled run retries"
             fi
             if [ -s "$RUNNER_TEMP/problems.txt" ]; then
               echo '```'
@@ -478,7 +467,7 @@ jobs:
             if [ -n "$reason" ]; then
               echo "### \`$BRANCH\` rejected at merge ($reason) - main unchanged, kept and parked until it is pushed again"
             elif [ "$PUSHED" != "success" ]; then
-              echo "### Merge failed for \`$BRANCH\`, not for its content - main unchanged, branch kept, attempt $ATTEMPT: from attempt 6 the branch is parked, before that the next scheduled run retries"
+              echo "### Merge failed for \`$BRANCH\`, not for its content - main unchanged, branch kept, attempt $ATTEMPT for this sha: counted; parked after 5, until then the next scheduled run retries"
             elif [ "$DISPATCHED" != "success" ]; then
               echo "### \`$BRANCH\` merged into main; the render dispatch failed - re-run it: \`gh workflow run render.yml --ref main\` (the next Accept run also does, as the branch is kept)"
             elif [ "$DELETED" != "success" ]; then
@@ -493,16 +482,15 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # a content rejection (or, as a fallback, a failure on attempt 6+): park the branch at this sha so find moves on to
-  # the next one, and say so in an issue
+  # any failed run on the branch (check failed or cancelled, or merge failed or cancelled before main was pushed):
+  # a content rejection parks the branch at this sha at once; anything else counts an attempt for this sha and parks
+  # only once attempts > 5 (a human cancel counts once too - acceptable). Parked branches are listed in an issue.
   record-failure:
     needs: [find, check, merge]
     if: >-
       always() && needs.find.outputs.branch != '' &&
-      (needs.check.outputs.content_rejected == 'true' ||
-       (needs.merge.outputs.content_rejected == 'true' && needs.merge.outputs.pushed != 'true') ||
-       (fromJSON(needs.find.outputs.attempt || '0') > 5 &&
-        (needs.check.result == 'failure' || (needs.merge.result == 'failure' && needs.merge.outputs.pushed != 'true'))))
+      (needs.check.result == 'failure' || needs.check.result == 'cancelled' ||
+       ((needs.merge.result == 'failure' || needs.merge.result == 'cancelled') && needs.merge.outputs.pushed != 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -511,7 +499,8 @@ jobs:
     env:
       BRANCH: ${{ needs.find.outputs.branch }}
       HEAD_SHA: ${{ needs.find.outputs.sha }}
-      REASON: ${{ needs.check.outputs.reason || needs.merge.outputs.reason || 'repeated infrastructure failures (check logs)' }}
+      CONTENT: ${{ needs.check.outputs.content_rejected == 'true' || needs.merge.outputs.content_rejected == 'true' }}
+      REASON: ${{ needs.check.outputs.reason || needs.merge.outputs.reason }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -519,17 +508,32 @@ jobs:
           persist-credentials: false
 
       - name: Record (and drop the records of branches that are gone)
+        id: record
         run: |
-          python3 tools/accept_check.py --record-failure "$BRANCH" "$HEAD_SHA" "$REASON"
+          if [ "$CONTENT" = "true" ]; then
+            rec=$(python3 tools/accept_check.py --record-failure "$BRANCH" "$HEAD_SHA" "$REASON")
+          else
+            rec=$(python3 tools/accept_check.py --record-infra "$BRANCH" "$HEAD_SHA")
+          fi
+          echo "$rec"
           python3 tools/accept_check.py --prune-failures --rejected-out "$RUNNER_TEMP/rejected.md"
-          echo "### \`$BRANCH\` rejected at ${HEAD_SHA:0:7} ($REASON): kept, parked until it is pushed again (or named in a manual run)" \
-            >> "$GITHUB_STEP_SUMMARY"
+          attempts=$(jq -r '.attempts' <<< "$rec")
+          if [ "$(jq -r '.parked' <<< "$rec")" = "true" ]; then
+            echo "verb=parked" >> "$GITHUB_OUTPUT"
+            echo "### \`$BRANCH\` parked at ${HEAD_SHA:0:7} ($(jq -r '.reason' <<< "$rec"); attempt $attempts): kept, skipped until it is pushed again (or named in a manual run)" \
+              >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "verb=failed (attempt $attempts)" >> "$GITHUB_OUTPUT"
+            echo "### \`$BRANCH\` failed at ${HEAD_SHA:0:7}, not for its content: attempt $attempts of 5 counted; the next scheduled run retries" \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Save
         env:
           GH_TOKEN: ${{ github.token }}
+          VERB: ${{ steps.record.outputs.verb }}
         run: |
-          bash tools/save_state.sh "$(printf 'Accept: %s rejected at %s\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>' "$BRANCH" "${HEAD_SHA:0:7}")"
+          bash tools/save_state.sh "$(printf 'Accept: %s %s at %s\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>' "$BRANCH" "$VERB" "${HEAD_SHA:0:7}")"
 
       - name: Issue
         if: always()

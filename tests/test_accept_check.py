@@ -275,7 +275,8 @@ def test_stale_records():
 def test_record_failure_roundtrip(tmp_path):
     accept_check.record_failure(tmp_path, "claude/oj-2026-11-09", "a" * 40, "pytest")
     assert accept_check.load_failures(tmp_path) == {"oj-2026-11-09": "a" * 40}
-    assert accept_check.load_records(tmp_path) == [{"branch": "claude/oj-2026-11-09", "sha": "a" * 40, "reason": "pytest"}]
+    assert accept_check.load_records(tmp_path) == [{"branch": "claude/oj-2026-11-09", "sha": "a" * 40, "attempts": 1,
+                                                   "parked": True, "reason": "pytest"}]
     with pytest.raises(ValueError):
         accept_check.record_failure(tmp_path, "claude/../x", "a" * 40)
 
@@ -394,3 +395,52 @@ def test_cli_prune_and_rejected_body(tmp_path):
     assert sorted(p.name for p in (ws / "state" / "accept").iterdir()) == ["oj-live.json"]
     body = (tmp_path / "rej.md").read_text(encoding="utf-8")
     assert "claude/oj-live" in body and "claude/oj-gone" not in body
+
+
+# --- per-sha attempt counting: infrastructure failures count up, park after 5; content parks at once ---
+
+def test_infra_failures_count_per_sha_and_park_after_five(tmp_path):
+    b, a, c = "claude/oj-x", "a" * 40, "c" * 40
+    recs = [accept_check.record_infra_failure(tmp_path, b, a) for _ in range(5)]
+    assert [r["attempts"] for r in recs] == [1, 2, 3, 4, 5] and not any(r["parked"] for r in recs)
+    assert accept_check.load_parked(tmp_path) == {}
+    assert accept_check.next_attempt(tmp_path, b, a) == 6
+    r = accept_check.record_infra_failure(tmp_path, b, a)
+    assert r["attempts"] == 6 and r["parked"] and r["reason"] == "repeated infrastructure failures (check logs)"
+    assert accept_check.load_parked(tmp_path) == {"oj-x": a}
+    # a new push (new sha) starts again at 1, unparked
+    r = accept_check.record_infra_failure(tmp_path, b, c)
+    assert r["attempts"] == 1 and not r["parked"]
+    assert accept_check.next_attempt(tmp_path, b, c) == 2
+    assert accept_check.next_attempt(tmp_path, b, a) == 1
+    assert accept_check.next_attempt(tmp_path, "claude/oj-new", a) == 1
+
+
+def test_content_rejection_parks_at_once_and_keeps_the_count(tmp_path):
+    b, a = "claude/oj-x", "a" * 40
+    accept_check.record_infra_failure(tmp_path, b, a)
+    r = accept_check.record_failure(tmp_path, b, a, "pytest")
+    assert r["parked"] and r["attempts"] == 2 and r["reason"] == "pytest"
+    assert accept_check.load_parked(tmp_path) == {"oj-x": a}
+
+
+def test_unparked_record_does_not_block_find_pick(tmp_path):
+    b = [{"name": "claude/oj-x", "sha": "a" * 40, "date": 1}]
+    accept_check.record_infra_failure(tmp_path, "claude/oj-x", "a" * 40)
+    assert accept_check.pick_branch(b, accept_check.load_parked(tmp_path), set())["name"] == "claude/oj-x"
+
+
+def test_rejected_body_only_parked(tmp_path):
+    accept_check.record_infra_failure(tmp_path, "claude/oj-infra", "a" * 40)
+    accept_check.record_failure(tmp_path, "claude/oj-bad", "b" * 40, "tsc")
+    body = accept_check.rejected_body(accept_check.parked_records(tmp_path))
+    assert "claude/oj-bad" in body and "claude/oj-infra" not in body
+
+
+def test_cli_record_infra_prints_the_record(tmp_path):
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    cli = [sys.executable, str(ROOT / "tools" / "accept_check.py"), "--record-infra", "claude/oj-x", "a" * 40]
+    import json
+    r = subprocess.run(cli, cwd=tmp_path, capture_output=True, text=True)
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)["attempts"] == 1
