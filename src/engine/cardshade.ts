@@ -61,7 +61,7 @@ vec3 outgoingLight = diffuseColor.rgb * tintK;
 const DECL = "#include <common>\nuniform vec3 uCharTint; uniform float uCharShade; uniform float uGrad; uniform float uBodyGrad; uniform vec3 uSideTint;"
   + " uniform float uGradK; uniform float uGradKB; uniform float uTintK; uniform float uNorm; uniform float uGain; uniform float uPx;";
 /** card-only constants (not per light): gradient share, tint share, overall gain (calibrated: faces ~.93 V) */
-export const CARD_K = { uGradK: { value: GRAD_K }, uGradKB: { value: GRAD_KB }, uTintK: { value: TINT_K }, uNorm: { value: 0.7 }, uGain: { value: 1.03 }, uPx: { value: 0.5 } }; // uPx = render height / 1920 (set per draw in cast.ts)
+export const CARD_K = { uGradK: { value: GRAD_K }, uGradKB: { value: GRAD_KB }, uTintK: { value: TINT_K }, uNorm: { value: 0.7 }, uGain: { value: 1.03 }, uPx: { value: 0.5 } }; // uPx = render height / 1920 (set per draw in cards.ts)
 
 /** MeshLambertMaterial -> lit card: no emissive, scene tint, bright floor, side gradient toward the sun. */
 export function cardShade(m: THREE.MeshLambertMaterial) {

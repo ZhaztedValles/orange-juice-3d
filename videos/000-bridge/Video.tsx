@@ -14,13 +14,13 @@ import { useThree } from "@react-three/fiber";
 import { EffectComposer } from "@react-three/postprocessing";
 import { BlendFunction, BloomEffect, ToneMappingEffect, ToneMappingMode } from "postprocessing";
 import { World, loadKit } from "./world";
-import { InkPass, noInkFallback } from "./ink";
-import { LensBlur, GrainEffect } from "./lensblur";
-import { GradeEffect, GRADES, GRADE_STRENGTH, gradeFor } from "./grade";
-import { Kit } from "./build";
+import { InkPass, noInkFallback } from "../../src/engine/ink";
+import { LensBlur, GrainEffect } from "../../src/engine/lensblur";
+import { GradeEffect, GRADES, GRADE_STRENGTH, gradeFor } from "../../src/engine/grade";
+import { Kit } from "../../src/engine/build";
 import { TOTAL, FLASH_AT, SHOTS, layersAt, dofAt } from "./story";
 
-export const BRIDGE_FRAMES = TOTAL;
+export const FRAMES = TOTAL;
 
 /** A/B switches for test stills only (Remotion inputProps `{ post: { ink: false, ... } }`); everything is on by default. */
 type PostToggles = { ink: boolean; lens: boolean; pre: boolean; bloom: boolean; grade: boolean; grain: boolean };
@@ -104,7 +104,7 @@ const ShotView: React.FC<{ id: number; kit: Kit; alpha: number }> = ({ id, kit, 
   </AbsoluteFill>
 );
 
-export const BridgeShort: React.FC = () => {
+const BridgeShort: React.FC = () => {
   const f = useCurrentFrame();
   const kit = useKit();
   if (!kit) return null;
@@ -116,3 +116,5 @@ export const BridgeShort: React.FC = () => {
     </AbsoluteFill>
   );
 };
+
+export default BridgeShort;

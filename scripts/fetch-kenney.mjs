@@ -1,12 +1,12 @@
 // Downloads the Kenney CC0 kits the bridge world uses and extracts only the .glb models world.ts loads into
-// public/bridge/kenney/. The models are CC0 (https://kenney.nl), but they are never committed: run this after
-// `npm ci` (CI caches public/bridge/kenney/). No dependencies: a tiny zip reader on top of node:zlib.
+// public/kenney/. The models are CC0 (https://kenney.nl), but they are never committed: run this after
+// `npm ci` (CI caches public/kenney/). No dependencies: a tiny zip reader on top of node:zlib.
 // usage: node scripts/fetch-kenney.mjs [--force]
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
 
-const OUT = path.resolve("public/bridge/kenney");
+const OUT = path.resolve("public/kenney");
 // kit page slug -> models taken from it (names as world.ts KENNEY lists them, without .glb)
 const KITS = {
   "nature-kit": ["tree_oak", "tree_default", "tree_detailed", "tree_fat", "tree_cone", "plant_bushLarge", "plant_bushDetailed",

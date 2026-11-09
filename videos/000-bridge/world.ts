@@ -2,30 +2,23 @@
 // backstays, anchors, bunting, flags) deformed every frame from the story physics, the park swing, smoke, clouds
 // and the cast. update(id, f, camera) poses everything for shot `id` at frame f (pure function of id + f).
 import * as THREE from "three";
-import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
-import { staticFile } from "remotion";
-import { Batch, Strand, boxGeo, V, lam, buildTown, flagTex, Kit, Ray, kitClone } from "./build";
-import { beam, bed, rep, ctex, planksHD, beamHD, stoneHD, cobbleHD, grassHD, chainHD, waterNear, waterFar, cloudHD } from "./paint";
-import { Pen, fxSign } from "./toon";
-import { LIGHTS, LOOK, LightPreset } from "./lights";
-import { TONE, CHAR, LFB, twoTone, untone } from "./shade";
-import { NOINK } from "./ink";
-import { Pool, Actor, Fx, stage, snapFx, splashFx, creakFx, SIGN_AT, SU_SWING } from "./cast";
+import { Batch, Strand, boxGeo, V, lam, Kit, Ray, kitClone } from "../../src/engine/build";
+import { loadKenney } from "../../src/engine/kit";
+import { beam, bed, rep, ctex, planksHD, beamHD, stoneHD, cobbleHD, grassHD, chainHD, waterNear, waterFar, cloudHD } from "../../src/engine/paint";
+import { Pen, fxSign } from "../../src/engine/toon";
+import { LIGHTS, LOOK, LightPreset } from "../../src/engine/lights";
+import { TONE, CHAR, LFB, twoTone, untone } from "../../src/engine/shade";
+import { NOINK } from "../../src/engine/ink";
+import { Pool, Actor, Fx } from "../../src/engine/cards";
+import { buildTown, flagTex } from "./town";
+import { stage, snapFx, splashFx, creakFx, SIGN_AT, SU_SWING } from "./cast";
 import { FPS, D0, SHOTS, PARK, ANCHOR, SNAP, camAt, bridgeState, deckY, dropW, shapeZ, snapEnd, front, BridgeState, V3, smooth, FOREGROUND, ShotDef } from "./story";
 
 // ---------------- assets ----------------
 const KENNEY = ["tree_oak", "tree_default", "tree_detailed", "tree_fat", "tree_cone", "tree-high-round", "tree", "plant_bushLarge", "plant_bushDetailed",
   "plant_bush", "hedge", "flower_redA", "flower_yellowA", "flower_purpleA", "grass_large", "grass", "lily_large", "lantern", "cart", "stall-red",
   "stall-green", "stall-bench", "banner-red", "banner-green", "windmill", "canoe"];
-let kitP: Promise<Kit> | null = null;
-export const loadKit = () => {
-  if (!kitP) {
-    const loader = new GLTFLoader();
-    kitP = Promise.all(KENNEY.map((n) => loader.loadAsync(staticFile(`bridge/kenney/${n}.glb`)).then((g) => [n, g.scene] as const).catch(() => [n, null] as const)))
-      .then((list) => Object.fromEntries(list.filter((e) => e[1]).map(([n, s]) => [n, s!])) as Kit);
-  }
-  return kitP;
-};
+export const loadKit = () => loadKenney(KENNEY);
 
 // ---------------- bridge geometry constants ----------------
 const NZ = 121; // deck samples every 0.5 m from z = -30 to 30

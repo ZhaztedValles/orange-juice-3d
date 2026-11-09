@@ -7,9 +7,11 @@
   "type": "module",
   "scripts": {
     "studio": "remotion studio src/index.ts",
+    "gen": "node scripts/gen-registry.mjs",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "fetch-kenney": "node scripts/fetch-kenney.mjs",
-    "stills": "node scripts/bridge-stills.mjs"
+    "stills": "node scripts/stills.mjs"
   },
   "dependencies": {
     "@react-three/fiber": "9.4.0",
@@ -27,6 +29,7 @@
   "devDependencies": {
     "@types/react": "19.2.2",
     "@types/three": "0.180.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
   }
 }

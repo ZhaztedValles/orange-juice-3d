@@ -1,6 +1,6 @@
 # Writes out/bridge/shots.json (shot frame ranges, crossfade windows, flash) from story.ts for scripts/short_qa.py.
 import json, os, re, sys
-src = open(sys.argv[1] if len(sys.argv) > 1 else "src/videos/bridge/story.ts", encoding="utf-8").read()
+src = open(sys.argv[1] if len(sys.argv) > 1 else "videos/000-bridge/story.ts", encoding="utf-8").read()
 shots = [{"id": int(i), "a": int(a), "b": int(b) if b != "TOTAL" else int(re.search(r"TOTAL = (\d+)", src).group(1))}
          for i, a, b in re.findall(r"\{ id: (\d+), a: (\d+), b: (\w+),", src)]
 xf = {int(k): int(v) for k, v in re.findall(r"(\d+): (\d+)", re.search(r"XFADE[^=]*= \{([^}]*)\}", src).group(1))}

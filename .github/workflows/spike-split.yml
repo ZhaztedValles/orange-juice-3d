@@ -1,6 +1,6 @@
 name: spike-split
 
-# Split rendering spike: a matrix of runners each renders one frame range of BridgeShort, then a join job
+# Split rendering spike: a matrix of runners each renders one frame range of the bridge template (oj-000-bridge), then a join job
 # concatenates the pieces losslessly (ffmpeg concat demuxer, -c copy) and checks the seams.
 on:
   workflow_dispatch:
@@ -86,7 +86,7 @@ jobs:
       - name: Cache Kenney models
         uses: actions/cache@v4
         with:
-          path: public/bridge/kenney
+          path: public/kenney
           key: kenney-${{ hashFiles('scripts/fetch-kenney.mjs') }}
 
       - name: Fetch Kenney models (CC0, no-op when cached)
@@ -100,7 +100,7 @@ jobs:
           # identical codec / fps / size / pixel format for every chunk so the pieces join with -c copy
           if [ "$RES" = "1280" ]; then SCALE=0.6666666666666666; props='{"post":{"dpr":0.6666666666666666}}'; else SCALE=1; props='{}'; fi
           set +e
-          npx remotion render src/index.ts BridgeShort pieces/piece_${{ matrix.idx }}.mp4 \
+          npx remotion render src/index.ts oj-000-bridge pieces/piece_${{ matrix.idx }}.mp4 \
             --frames=${{ matrix.from }}-${{ matrix.to }} --gl="$GL" --scale="$SCALE" --props="$props" \
             --codec=h264 --crf=16 --pixel-format=yuv420p --muted --timeout=240000 $extra 2>&1 \
             | tee render.log | stdbuf -oL tr '\r' '\n' | grep --line-buffered -E "Rendered [0-9]*0/|rror"
@@ -147,7 +147,7 @@ jobs:
       - name: Cache Kenney models
         uses: actions/cache@v4
         with:
-          path: public/bridge/kenney
+          path: public/kenney
           key: kenney-${{ hashFiles('scripts/fetch-kenney.mjs') }}
 
       - run: node scripts/fetch-kenney.mjs
@@ -182,7 +182,7 @@ jobs:
           list=$(cat pieces/piece_*.json | python3 -c "import sys,json; r=[json.loads(l) for l in sys.stdin]; print(','.join(str(f) for x in r if x['from']>0 for f in (x['from']-1, x['from'])))")
           echo "boundary frames: $list"
           if [ "$RES" = "1280" ]; then SCALE=0.6666666666666666; props='{"post":{"dpr":0.6666666666666666}}'; else SCALE=1; props='{}'; fi
-          REMOTION_TMP="$TMPDIR" STILL_FORMAT=png INPUT_PROPS="$props" node scripts/bridge-stills.mjs seams/ref_ "$list" "$SCALE" 2>&1 | grep -E "^(bundle|still)|rror" || true
+          REMOTION_TMP="$TMPDIR" STILL_FORMAT=png INPUT_PROPS="$props" node scripts/stills.mjs seams/ref_ "$list" "$SCALE" 2>&1 | grep -E "^(bundle|still)|rror" || true
           for f in ${list//,/ }; do
             ffmpeg -v error -y -i joined.mp4 -vf "select=eq(n\,$f)" -vsync 0 -frames:v 1 seams/joined_$f.png
             psnr=$(ffmpeg -i seams/joined_$f.png -i seams/ref_$f.png -lavfi psnr -f null - 2>&1 | grep -oE "average:[0-9.inf]+" | cut -d: -f2)

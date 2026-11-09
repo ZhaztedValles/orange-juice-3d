@@ -2,6 +2,7 @@
 // story physics (column position, march phase, deck bounce, collapse) and the camera grammar measured in the
 // reference study: continuous slow push-ins; symmetric ease-in-out moves ~23 f (10 in / 10 out), peak ~15 px/f at 720p;
 // big reframes are cuts; impacts are 7-frame kicks that flip sign every frame; no hand-held float.
+import { clamp01, smooth, easeOut } from "../../src/engine/math";
 export const FPS = 30;
 export const TOTAL = 2025;
 export const D0 = 6.0; // bank top + deck height (m)
@@ -12,9 +13,7 @@ export const COUNT = 74;
 export const PARK: V3 = [70, D0, -75]; // swing pivot base (x, ground y, z)
 export type V3 = [number, number, number];
 
-export const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
-export const smooth = (x: number) => { const u = clamp01(x); return u * u * (3 - 2 * u); };
-export const easeOut = (u: number) => 1 - (1 - clamp01(u)) ** 4;
+export { clamp01, smooth, easeOut };
 const lin = (pts: [number, number][], x: number) => {
   if (x <= pts[0][0]) return pts[0][1];
   for (let i = 1; i < pts.length; i++) if (x <= pts[i][0]) {

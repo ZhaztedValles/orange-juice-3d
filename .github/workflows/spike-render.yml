@@ -1,6 +1,6 @@
 name: spike-render
 
-# Milestone 1 speed spike: render a frame range of BridgeShort on a CPU-only ubuntu runner and time it.
+# Milestone 1 speed spike: render a frame range of the bridge template (oj-000-bridge) on a CPU-only ubuntu runner and time it.
 on:
   workflow_dispatch:
     inputs:
@@ -59,7 +59,7 @@ jobs:
         id: kenney
         uses: actions/cache@v4
         with:
-          path: public/bridge/kenney
+          path: public/kenney
           key: kenney-${{ hashFiles('scripts/fetch-kenney.mjs') }}
 
       - name: Fetch Kenney models (CC0)
@@ -77,7 +77,7 @@ jobs:
           if [ "$RES" = "1280" ]; then SCALE=0.6666666666666666; props='{"post":{"dpr":0.6666666666666666}}'; else SCALE=1; props='{}'; fi
           start=$(date +%s.%N)
           set +e
-          npx remotion render src/index.ts BridgeShort out/spike/segment.mp4 \
+          npx remotion render src/index.ts oj-000-bridge out/spike/segment.mp4 \
             --frames="$FRAMES" --gl="$GL" --scale="$SCALE" --props="$props" --codec=h264 --crf=16 \
             --timeout=240000 $extra --log=verbose 2>&1 | tee render.log | stdbuf -oL tr '\r' '\n' | grep --line-buffered -E "Rendered [0-9]*0/|rror"
           rc=${PIPESTATUS[0]}
@@ -97,7 +97,7 @@ jobs:
         run: |
           mid=$(( (${FRAMES%-*} + ${FRAMES#*-}) / 2 ))
           start=$(date +%s)
-          REMOTION_TMP="$TMPDIR" node scripts/bridge-stills.mjs out/spike/ci_${GL}_ "$mid,200" 0.5 2>&1 | grep -E "^(bundle|still)|rror" || true
+          REMOTION_TMP="$TMPDIR" node scripts/stills.mjs out/spike/ci_${GL}_ "$mid,200" 0.5 2>&1 | grep -E "^(bundle|still)|rror" || true
           echo "stills took $(( $(date +%s) - start ))s (incl. bundle)" | tee -a timing.txt
 
       - uses: actions/upload-artifact@v4

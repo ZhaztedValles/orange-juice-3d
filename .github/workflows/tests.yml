@@ -1,0 +1,39 @@
+# Tests: the video registry is up to date, TypeScript compiles, vitest and pytest pass.
+# Runs on pushes to main and on pull requests; other workflows reuse it through workflow_call.
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+jobs:
+  ts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Cache node_modules
+        id: nm
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node_modules-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+      - if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci
+      - run: npm run gen -- --check
+      - run: npx tsc --noEmit
+      - run: npx vitest run
+
+  py:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q tests
