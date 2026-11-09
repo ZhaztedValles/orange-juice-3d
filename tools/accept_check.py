@@ -44,6 +44,7 @@ VIDEO_PATH_RE = re.compile(r"videos/(\d{3}-[a-z0-9-]{3,50})/[\w.-]+\.(?:ts|tsx|j
 VIDEO_DIR_RE = re.compile(r"videos/([^/]+)/", re.ASCII)
 STORIES_RE = re.compile(r"stories/(?:ledger|banned)\.yml", re.ASCII)
 BRANCH_RE = re.compile(r"claude/oj-[A-Za-z0-9._-]+", re.ASCII)
+NO_HISTORY = "no common history with main"
 STATUSES = ("A", "M", "D")
 WORKFLOW_RE = re.compile(r"\.github(?:/|$)", re.ASCII | re.IGNORECASE)
 
@@ -102,8 +103,9 @@ def _literal(x):
 
 
 def tripwire_body(tripped):
-    lines = ["A writer branch changed files under .github/ (in its diff or in any of its commits). Accept never "
-             "processes such a branch; check it by hand, then delete it (and review recent workflow runs).", "", "```"]
+    lines = ["A writer branch changed files under .github/ (in its diff or in any of its commits), or has no common "
+             "history with main. Accept never processes such a branch; check it by hand, then delete it (and review "
+             "recent workflow runs).", "", "```"]
     for t in tripped:
         lines.append(f"{_literal(t['branch'])} at {_literal(t['sha'])}:")
         lines += [f"  {_literal(p)}" for p in t["paths"]]
@@ -231,10 +233,16 @@ def find(repo, only=None):
     for name in sorted(remote_branches(repo)):
         _git("fetch", "-q", "--no-tags", "origin", f"+refs/heads/{name}:refs/remotes/origin/{name}", repo=repo)
         sha = _git("rev-parse", f"refs/remotes/origin/{name}^{{commit}}", repo=repo).strip()
-        base = _git("merge-base", "HEAD", sha, repo=repo).strip()
-        touched = [("?", p) for p in log_paths_z(_git("log", "--format=", "--name-only", "-z", f"{base}..{sha}",
-                                                         repo=repo))]
-        paths = list(dict.fromkeys(workflow_paths(changes("HEAD", sha, repo)) + workflow_paths(touched)))
+        mb = subprocess.run(["git", "merge-base", "HEAD", sha], capture_output=True, text=True, cwd=str(repo))
+        if mb.returncode or not mb.stdout.strip():
+            paths = [NO_HISTORY]        # unrelated history: never processed (and a three-dot diff would fail)
+        else:
+            # every commit's paths; a merge commit shows its diff against its first parent, so a workflow added by an
+            # evil merge resolution is seen even when a later commit removes it
+            log = _git("log", "--format=", "--name-only", "-z", "--diff-merges=first-parent",
+                       f"{mb.stdout.strip()}..{sha}", repo=repo)
+            touched = [("?", p) for p in log_paths_z(log)]
+            paths = list(dict.fromkeys(workflow_paths(changes("HEAD", sha, repo)) + workflow_paths(touched)))
         if paths:
             tripped.append({"branch": name, "sha": sha, "paths": paths})
         date = int(_git("log", "-1", "--format=%ct", sha, repo=repo).strip())

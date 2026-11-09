@@ -318,6 +318,36 @@ def test_cli_find(tmp_path):
     _git(ws, "push", "-q", "origin", "claude/oj-sneaky")
     sneaky = _git(ws, "rev-parse", "HEAD").strip()
     _git(ws, "checkout", "-q", "main")
+    # evil merge: the merge commit itself adds a workflow (in neither parent), a later commit removes it
+    _git(ws, "checkout", "-q", "-b", "side", "main")
+    (ws / "stories").mkdir(exist_ok=True)
+    (ws / "stories" / "ledger.yml").write_text("side")
+    _git(ws, "add", "-A")
+    _git(ws, "commit", "-q", "-m", "side")
+    _git(ws, "checkout", "-q", "-b", "claude/oj-merge", "main")
+    (ws / "stories").mkdir(exist_ok=True)
+    (ws / "stories" / "banned.yml").write_text("m")
+    _git(ws, "add", "-A")
+    _git(ws, "commit", "-q", "-m", "m")
+    _git(ws, "merge", "-q", "--no-commit", "--no-ff", "side")
+    (ws / ".github" / "workflows").mkdir(parents=True, exist_ok=True)
+    (ws / ".github" / "workflows" / "m.yml").write_text("x")
+    _git(ws, "add", "-A")
+    _git(ws, "commit", "-q", "-m", "evil merge")
+    _git(ws, "rm", "-q", ".github/workflows/m.yml")
+    _git(ws, "commit", "-q", "-m", "hide")
+    _git(ws, "push", "-q", "origin", "claude/oj-merge")
+    merged = _git(ws, "rev-parse", "HEAD").strip()
+    # no common history with main
+    _git(ws, "checkout", "-q", "--orphan", "claude/oj-orphan")
+    _git(ws, "rm", "-rq", "--cached", ".")
+    (ws / "stories" / "ledger.yml").write_text("o")
+    _git(ws, "add", "stories/ledger.yml")
+    _git(ws, "commit", "-q", "-m", "orphan")
+    _git(ws, "push", "-q", "origin", "claude/oj-orphan")
+    orphan = _git(ws, "rev-parse", "HEAD").strip()
+    _git(ws, "checkout", "-q", "-f", "main")
+    _git(ws, "clean", "-qfd")
     failed = branch("claude/oj-failed", "stories/ledger.yml", 2000)
     branch("claude/oj-good", "stories/banned.yml", 3000)
     branch("feature/other", "stories/banned.yml", 500)
@@ -331,6 +361,8 @@ def test_cli_find(tmp_path):
     out = json.loads(r.stdout)
     assert out["branch"] == "claude/oj-good" and len(out["sha"]) == 40 and out["slug"] == "oj-good"
     assert out["tripped"] == [{"branch": "claude/oj-evil", "sha": evil, "paths": [".github/workflows/e.yml"]},
+                              {"branch": "claude/oj-merge", "sha": merged, "paths": [".github/workflows/m.yml"]},
+                              {"branch": "claude/oj-orphan", "sha": orphan, "paths": ["no common history with main"]},
                               {"branch": "claude/oj-sneaky", "sha": sneaky, "paths": [".github/workflows/s.yml"]}]
     r = subprocess.run(cli + ["--only", "claude/oj-failed"], cwd=ws, capture_output=True, text=True)
     assert json.loads(r.stdout)["branch"] == "claude/oj-failed"
