@@ -698,3 +698,11 @@ def test_secret_and_write_jobs_never_restore_a_cache():
         text = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / wf).read_text(encoding="utf-8")
         assert "cache:" not in text.replace("# No cache", ""), wf
         assert "actions/cache" not in text, wf
+
+
+def test_post_job_uses_youtube_environment():
+    # YT secrets are environment secrets restricted to main; a writer branch's workflow can never read them
+    from pathlib import Path
+    import yaml
+    wf = yaml.safe_load((Path(__file__).resolve().parent.parent / ".github" / "workflows" / "post.yml").read_text(encoding="utf-8"))
+    assert wf["jobs"]["post"]["environment"] == "youtube"

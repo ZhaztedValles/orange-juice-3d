@@ -36,6 +36,7 @@ permissions: {}
 jobs:
   post:
     runs-on: ubuntu-latest
+    environment: youtube   # the YouTube secrets live only in this main-only environment (writer branches cannot read them)
     timeout-minutes: 30
     permissions:
       contents: write           # commit state/posted, delete the posted assets from the queue release

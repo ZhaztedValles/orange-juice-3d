@@ -20,7 +20,7 @@ this channel reuses it, so nothing new needs creating there.
 
 ### Step 3 - Add the secrets to this repo
 
-In the `orange-juice-3d` repo, go to **Settings → Secrets and variables → Actions → New repository secret**, and add:
+In the `orange-juice-3d` repo, go to **Settings → Environments → youtube** (only the `main` branch may use it, so the nightly writer's branches can never read these keys) → **Add environment secret**, and add:
 
 | Secret | Value |
 |---|---|
