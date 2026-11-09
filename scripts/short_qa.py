@@ -1,14 +1,20 @@
 # Frame-by-frame QA of a rendered vertical short (every frame at 30 fps): specs, loudness, per-frame luma / saturation /
 # motion, black-white-frozen-pop detection (ignoring planned flashes and crossfades), per-shot colour stats and 2 s
 # contact sheets (60 frames each, frame numbers burned in for the reviewer only).
-# Usage: python scripts/short_qa.py <video.mp4> <outdir> [shots.json]
+# Usage: python scripts/short_qa.py <video.mp4> <outdir> [shots.json] [--json qa.json]
 #   shots.json: [{"id":1,"a":0,"b":130}, ...] plus optional {"flash":[130,134], "xfade":[[1131,1137], ...]}
-import json, os, subprocess, sys
+#   --json: also write the numbers tools/qa_gate.py checks: width, height, fps, frames, audio_sr, lufs, true_peak, counts of
+#   unplanned black / white / pop frames, and the frozen runs as [start, end] (a run still frozen at the last frame counts too)
+import json, math, os, subprocess, sys
 import numpy as np
 from PIL import Image, ImageDraw
 
-vid, out = sys.argv[1], sys.argv[2]
-meta = json.load(open(sys.argv[3])) if len(sys.argv) > 3 else {}
+args = sys.argv[1:]
+json_out = None
+if "--json" in args:
+    k = args.index("--json"); json_out = args[k + 1]; del args[k:k + 2]
+vid, out = args[0], args[1]
+meta = json.load(open(args[2])) if len(args) > 2 else {}
 shots = meta.get("shots", [])
 planned = set()
 for a, b in meta.get("xfade", []) + meta.get("planned", []) + ([meta["flash"]] if "flash" in meta else []):
@@ -29,6 +35,8 @@ if au:
     tail = e[e.rfind("Summary:"):]
     I = [l.strip() for l in tail.splitlines() if l.strip().startswith(("I:", "LRA:", "Peak:"))]
     R.append("LOUDNESS " + " | ".join(I))
+    num = lambda key: next((float(l.split()[1]) for l in I if l.startswith(key)), None)
+    lufs, true_peak = num("I:"), num("Peak:")
     e = run("ffmpeg", "-i", vid, "-map", "0:a:0", "-af", "silencedetect=n=-45dB:d=0.3", "-f", "null", "-").stderr
     R.append("SILENCES " + ("; ".join(l.split("] ")[-1] for l in e.splitlines() if "silence_" in l) or "none"))
 
@@ -75,4 +83,14 @@ for k in range(0, n, 60):
         d.rectangle([x, y, x + 34, y + 12], fill="black"); d.text((x + 2, y + 1), str(k + j), fill="yellow")
     S.save(os.path.join(out, f"sheet_{k:04d}.jpg"), quality=85)
 open(os.path.join(out, "report.md"), "w", encoding="utf-8").write("\n".join(R) + "\n")
+if json_out:
+    fin = lambda x: x if x is not None and math.isfinite(x) else None
+    fr = [int(x) for x in v["r_frame_rate"].split("/")]
+    tail_run = [(run_start, len(diff))] if run_start is not None and len(diff) - run_start >= 12 else []
+    with open(json_out, "w", encoding="utf-8") as f:
+        json.dump({"width": int(v["width"]), "height": int(v["height"]), "fps": fr[0] / fr[1], "frames": n,
+                   "audio_sr": int(au[0]["sample_rate"]) if au else None,
+                   "lufs": fin(lufs) if au else None, "true_peak": fin(true_peak) if au else None,
+                   "black": sum(1 for i in black if i not in planned), "white": len(white), "pops": len(pops),
+                   "frozen": [[int(a), int(b)] for a, b in frozen + tail_run]}, f, indent=1)
 print("\n".join(R))

@@ -32,8 +32,10 @@ node scripts/stills.mjs out/x_ 100,400 0.5          # COMPOSITION=oj-<id> picks 
 npx remotion render src/index.ts oj-000-bridge out/seg.mp4 --frames=0-299 --concurrency=1
 ```
 
-On CI, `.github/workflows/spike-render.yml` (manual `workflow_dispatch`, inputs `frames` and `gl`) renders a frame
-range on an ubuntu runner and uploads the mp4 and a still.
+On CI, `.github/workflows/render.yml` (manual `workflow_dispatch`, inputs `video` and `queue`) renders the next eligible
+video (or `video`) in 16 parallel chunks, joins them, mixes and muxes the audio, gates the result with `short_qa` +
+`tools/qa_gate.py`, then uploads it to the `queue` release or holds it in `state/render/<id>.json` until the folder is
+committed again.
 
 ## Scripts
 - `scripts/fetch-kenney.mjs`: fetch the Kenney models (never committed).

@@ -1,0 +1,315 @@
+# Render line: plan picks the next video (or the `video` input), 16 runners each render one frame range of oj-<id>,
+# finish joins the pieces losslessly, builds the mix in Python, muxes, runs short_qa + qa_gate, then queues the short
+# (release `queue`: <id>.mp4 + <id>.yml) or holds it (state/render/<id>.json), and re-dispatches itself for the next one.
+#
+# Security (public repo): the render jobs execute writer-authored Video.tsx, so they get `contents: read` only, no secrets,
+# no persisted git credentials, and they only RESTORE caches (plan, which runs no video code, is the one that saves them).
+# finish holds the write permissions and never runs video code: no Remotion there, only ffmpeg and the repo's Python.
+name: render
+
+on:
+  workflow_dispatch:
+    inputs:
+      video:
+        description: "Video id to render (e.g. 000-bridge); empty = the next eligible video"
+        default: ""
+        required: false
+      queue:
+        description: "Upload a passing render to the queue release (templates are never queued)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: oj-render
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      video: ${{ steps.plan.outputs.video }}
+      frames: ${{ steps.plan.outputs.frames }}
+      template: ${{ steps.plan.outputs.template }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      INPUT_VIDEO: ${{ inputs.video }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0              # render_plan compares each folder's last commit with its held time
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Plan
+        id: plan
+        run: |
+          if [ -f config.yml ] && python -c "import sys, yaml; sys.exit(0 if (yaml.safe_load(open('config.yml')) or {}).get('paused') is True else 1)"; then
+            echo "::notice::config.yml has paused: true, nothing rendered"
+            echo "video=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          plan=$(python tools/render_plan.py --video "$INPUT_VIDEO")
+          echo "$plan"
+          {
+            echo "video=$(jq -r '.video // ""' <<< "$plan")"
+            echo "frames=$(jq -r '.frames' <<< "$plan")"
+            echo "template=$(jq -r '.template' <<< "$plan")"
+            echo "matrix=$(jq -c '.matrix' <<< "$plan")"
+          } >> "$GITHUB_OUTPUT"
+
+      # Warm the caches here, where no video code runs, so the render jobs only ever restore them
+      - if: steps.plan.outputs.video != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # node_modules includes Remotion's downloaded headless shell (node_modules/.remotion), so one cache covers both
+      - name: Cache node_modules + Remotion browser
+        if: steps.plan.outputs.video != ''
+        id: nm
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: nm-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+          lookup-only: true
+
+      - name: Install
+        if: steps.plan.outputs.video != '' && steps.nm.outputs.cache-hit != 'true'
+        run: npm ci && npx remotion browser ensure
+
+      - name: Cache Kenney models
+        if: steps.plan.outputs.video != ''
+        id: kenney
+        uses: actions/cache@v4
+        with:
+          path: public/kenney
+          key: kenney-${{ hashFiles('scripts/fetch-kenney.mjs') }}
+          lookup-only: true
+
+      - name: Fetch Kenney models (CC0, never committed)
+        if: steps.plan.outputs.video != '' && steps.kenney.outputs.cache-hit != 'true'
+        run: node scripts/fetch-kenney.mjs
+
+  render:
+    needs: plan
+    if: needs.plan.outputs.video != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    env:
+      TMPDIR: ${{ github.workspace }}/../remotion-tmp
+      VIDEO: ${{ needs.plan.outputs.video }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Restore node_modules + Remotion browser
+        id: nm
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: nm-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+
+      - name: Install (only when the cache is missing)
+        if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci && npx remotion browser ensure
+
+      - name: Restore Kenney models
+        uses: actions/cache/restore@v4
+        with:
+          path: public/kenney
+          key: kenney-${{ hashFiles('scripts/fetch-kenney.mjs') }}
+
+      - name: Fetch Kenney models (CC0, no-op when restored)
+        run: node scripts/fetch-kenney.mjs
+
+      - run: npm run gen
+
+      - name: Render chunk ${{ matrix.idx }} (${{ matrix.from }}-${{ matrix.to }})
+        run: |
+          mkdir -p "$TMPDIR" pieces
+          # identical codec / fps / size / pixel format for every chunk so the pieces join with -c copy
+          set +e
+          npx remotion render src/index.ts "oj-$VIDEO" "pieces/piece_${{ matrix.idx }}.mp4" \
+            --frames=${{ matrix.from }}-${{ matrix.to }} --gl=swangle --concurrency=1 \
+            --codec=h264 --crf=16 --pixel-format=yuv420p --muted --timeout=240000 2>&1 \
+            | tee render.log | stdbuf -oL tr '\r' '\n' | grep --line-buffered -E "Rendered [0-9]*0/|rror"
+          rc=${PIPESTATUS[0]}
+          set -e
+          [ "$rc" = 0 ] || { tail -c 4000 render.log; exit "$rc"; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: piece-${{ matrix.idx }}
+          path: pieces/piece_${{ matrix.idx }}.mp4
+          retention-days: 3
+          if-no-files-found: error
+
+  finish:
+    needs: [plan, render]
+    if: needs.plan.outputs.video != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write     # commit state/render, upload to the queue release
+      actions: write      # re-dispatch render.yml
+    env:
+      VIDEO: ${{ needs.plan.outputs.video }}
+      FRAMES: ${{ needs.plan.outputs.frames }}
+      TEMPLATE: ${{ needs.plan.outputs.template }}
+      QUEUE: ${{ inputs.queue }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Install ffmpeg
+        run: command -v ffmpeg >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null; }
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: piece-*
+          path: pieces
+          merge-multiple: true
+
+      - name: Join losslessly and check the frame count
+        id: join
+        run: |
+          ls pieces/piece_*.mp4 | sort | sed "s|^|file '$PWD/|; s|$|'|" > list.txt
+          cat list.txt
+          ffmpeg -v error -y -f concat -safe 0 -i list.txt -c copy -movflags +faststart joined.mp4
+          got=$(ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames -of csv=p=0 joined.mp4)
+          echo "joined.mp4: $got frames (want $FRAMES)"
+          [ "$got" = "$FRAMES" ] || { echo "::error::joined.mp4 has $got frames, want $FRAMES"; exit 1; }
+
+      - name: Mix
+        id: mix
+        run: |
+          python audio/build_mix.py "videos/$VIDEO" "out/$VIDEO" 2> mix_err.txt || { cat mix_err.txt; exit 1; }
+          cat mix_err.txt
+
+      - name: Mux
+        id: mux
+        run: |
+          ffmpeg -v error -y -i joined.mp4 -i "out/$VIDEO/mix.wav" -map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -b:a 192k -ar 48000 \
+            -shortest -movflags +faststart final.mp4
+
+      - name: QA
+        id: qa
+        run: python scripts/short_qa.py final.mp4 qa "videos/$VIDEO/shots.json" --json qa.json && cat qa.json
+
+      - name: Gate
+        id: gate
+        run: |
+          set +e
+          python tools/qa_gate.py qa.json "$FRAMES" > reasons.txt
+          rc=$?
+          set -e
+          cat reasons.txt
+          case "$rc" in
+            0) echo "result=pass" >> "$GITHUB_OUTPUT" ;;
+            1) echo "result=fail" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$rc" ;;
+          esac
+
+      # pass -> queue (unless a template or queue=false); QA fail or a mix the video's audio.json breaks -> held;
+      # anything else (join, mux, QA crash) is infrastructure: no state, so the video is simply picked again next run
+      - name: Decide
+        id: decide
+        if: always() && steps.join.outcome == 'success'
+        run: |
+          if [ "${{ steps.gate.outputs.result }}" = "pass" ]; then
+            if [ "$TEMPLATE" = "true" ]; then echo "::notice::$VIDEO is a template: never queued"; echo "status=passed" >> "$GITHUB_OUTPUT"
+            elif [ "$QUEUE" = "false" ]; then echo "::notice::queue=false: $VIDEO passed but is not queued"; echo "status=passed" >> "$GITHUB_OUTPUT"
+            else echo "status=queued" >> "$GITHUB_OUTPUT"; fi
+          elif [ "${{ steps.gate.outputs.result }}" = "fail" ]; then
+            echo "status=held" >> "$GITHUB_OUTPUT"
+          elif [ "${{ steps.mix.outcome }}" = "failure" ]; then
+            { echo "build_mix failed:"; tail -n 5 mix_err.txt; } > reasons.txt
+            echo "status=held" >> "$GITHUB_OUTPUT"
+          else
+            echo "status=error" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Queue
+        id: queue
+        if: always() && steps.decide.outputs.status == 'queued'
+        run: |
+          gh release create queue --title queue --notes "Render queue" || true
+          cp final.mp4 "$VIDEO.mp4"
+          python tools/render_plan.py --video "$VIDEO" --queue-yml "$VIDEO.yml"
+          cat "$VIDEO.yml"
+          gh release upload queue "$VIDEO.mp4" "$VIDEO.yml" --clobber
+          python tools/render_plan.py --video "$VIDEO" --set-state queued
+
+      - name: Hold
+        id: hold
+        if: always() && steps.decide.outputs.status == 'held'
+        run: |
+          python tools/render_plan.py --video "$VIDEO" --set-state held --reasons reasons.txt
+          while read -r r; do [ -n "$r" ] && echo "::error::$VIDEO held: $r"; done < reasons.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: result-${{ needs.plan.outputs.video }}
+          path: |
+            final.mp4
+            qa/
+            qa.json
+            out/${{ needs.plan.outputs.video }}/mix_report.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Save render state
+        id: save
+        if: always()
+        run: |
+          git config user.name "orange-juice-autopilot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A state
+          if git diff --cached --quiet; then echo "Nothing to save"; exit 0; fi
+          git commit -q -m "Render: $VIDEO ${{ steps.decide.outputs.status }}"
+          for i in 1 2 3; do
+            git pull --rebase -q && git push -q && exit 0
+            git rebase --abort 2>/dev/null || true; sleep $((i * 5))
+          done
+          echo "::error::Could not save progress after 3 tries"; exit 1
+
+      # only for unattended runs, and only once this video's outcome is saved (queued or held), so the next plan moves on
+      - name: Render the next video
+        if: >-
+          always() && inputs.video == '' && steps.save.outcome == 'success' &&
+          (steps.queue.outcome == 'success' || steps.hold.outcome == 'success')
+        run: gh workflow run render.yml --ref main
+
+      - name: Fail the run when held
+        if: always() && steps.hold.outcome == 'success'
+        run: exit 1
