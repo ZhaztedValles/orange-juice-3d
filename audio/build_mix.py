@@ -25,8 +25,10 @@ from .dsp import SR, ns, dbg, rng, pan, place, st, integrated, true_peak, write_
 
 TARGET_LUFS = -14.0
 CEIL_DBTP = -1.2
-MUSIC_REL = -18.0 + 3.0                                  # music integrated loudness vs the voice's
-SFX_REL = -20.0 - 6.0                                    # sum of SFX events vs the voice's
+# Levels below the voice's integrated loudness, before the master gain: the bridge's balance
+# (its stems at a -15 LUFS master: voice -15.4, music -25.8, sfx -29.1 LUFS integrated).
+MUSIC_BELOW_VOICE_DB = 10.4                              # -15.4 - (-25.8)
+SFX_BELOW_VOICE_DB = 13.7                                # -15.4 - (-29.1), the sum of all events
 DUCK_DB = -3.0
 
 
@@ -132,14 +134,14 @@ def build(folder, outdir):
         raise ValueError(f"{folder}/voice.wav is silent")
 
     music = score.render(a["music"], a["key"], a["bpm"], n / SR, video_seed(folder)).T
-    music = _gain_to(music, lv + MUSIC_REL)
+    music = _gain_to(music, lv - MUSIC_BELOW_VOICE_DB)
     music = music * dbg(duck_db([(w["s"], w["e"]) for w in words], n))[None, :]
 
     sfx = np.zeros((2, n))
     for i, e in enumerate(a.get("sfx", [])):
         t, y = sfx_event(i, e)
         place(sfx, y, t)
-    sfx = _gain_to(sfx, lv + SFX_REL)
+    sfx = _gain_to(sfx, lv - SFX_BELOW_VOICE_DB)
 
     pre = voice + music + sfx
     g = dbg(TARGET_LUFS - integrated(pre))
