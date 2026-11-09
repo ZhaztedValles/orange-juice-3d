@@ -76,10 +76,12 @@ jobs:
           # The scale must make 1080*s and 1920*s exact integers in floating point, hence 2/3 written out.
           if [ "$RES" = "1280" ]; then SCALE=0.6666666666666666; props='{"post":{"dpr":0.6666666666666666}}'; else SCALE=1; props='{}'; fi
           start=$(date +%s.%N)
-          rc=0
+          set +e
           npx remotion render src/index.ts BridgeShort out/spike/segment.mp4 \
             --frames="$FRAMES" --gl="$GL" --scale="$SCALE" --props="$props" --codec=h264 --crf=16 \
-            --timeout=240000 $extra --log=verbose > render.log 2>&1 || rc=$?
+            --timeout=240000 $extra --log=verbose 2>&1 | tee render.log | stdbuf -oL tr '\r' '\n' | grep --line-buffered -E "Rendered [0-9]*0/|rror"
+          rc=${PIPESTATUS[0]}
+          set -e
           end=$(date +%s.%N)
           tr '\r' '\n' < render.log | grep -vE "colormap|^\s*$" | grep -iE "Rendered [0-9]*0/|Encoded [0-9]+/[0-9]+$|error|concurrency|gl|renderer" | tail -n 80 || true
           if [ "$rc" != 0 ]; then tr '\r' '\n' < render.log | tail -n 60; echo "render failed rc=$rc"; exit "$rc"; fi
