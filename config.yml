@@ -5,7 +5,7 @@ paused: false
 timezone: Asia/Manila
 slots: ["19:00"]            # one post per slot; later ["12:00", "19:00"]
 slot_window_minutes: 90     # a run within 90 min after a slot may post for that slot
-require_approval: true      # monitored launch: only ids listed in state/approved.yml post
+require_approval: false     # owner decision 2026-11-09: no review; queued videos post automatically (set true + list ids in state/approved.yml to gate posting)
 youtube:
   enabled: true
   privacy: public
