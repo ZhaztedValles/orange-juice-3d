@@ -1,7 +1,8 @@
 """Where queued videos live.
 
 Videos are files attached to a GitHub Release named "queue" (the render workflow uploads <id>.mp4 + <id>.yml there).
-Posting downloads only the video it is about to post and deletes its two assets once the post is recorded.
+Posting downloads only the video it is about to post; `publish.py cleanup` deletes the assets of posted ids once the
+post record is saved. Reading the queue never creates the release (the render workflow does that).
 
 Set OJ_LOCAL_QUEUE=/some/folder to use a plain folder instead (for testing).
 """
@@ -28,7 +29,12 @@ class ReleaseStore:
             print("Created the 'queue' release")
 
     def names(self):
-        r = self._gh("release", "view", TAG, "--json", "assets")
+        """asset names; read-only: a missing release is an empty queue (it is never created here)"""
+        r = self._gh("release", "view", TAG, "--json", "assets", check=False)
+        if r.returncode:
+            if "not found" in r.stderr.lower():
+                return []
+            raise RuntimeError(f"gh release view failed: {r.stderr.strip()[:300]}")
         return [a["name"] for a in json.loads(r.stdout)["assets"]]
 
     def download(self, pattern, dest):
@@ -51,7 +57,8 @@ class LocalStore:
         self.dir.mkdir(parents=True, exist_ok=True)
 
     def names(self):
-        self.ensure()
+        if not self.dir.is_dir():
+            return []
         return sorted(p.name for p in self.dir.iterdir() if p.is_file())
 
     def download(self, pattern, dest):

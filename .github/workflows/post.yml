@@ -6,6 +6,12 @@
 # Times are UTC. When config.yml `slots` change, list a cron inside each slot's window here (tests/test_publish.py
 # checks it): 19:05 Manila = 11:05 UTC; for a 12:00 slot add 04:05 UTC.
 #
+# Order matters: Post uploads and writes state/posted/<id>.json; Save progress commits and pushes it; only after the
+# save succeeds does Cleanup delete the video's assets from the queue release. If the push fails, the job fails, the
+# assets stay, and the video is still queued. KNOWN RESIDUAL: the backup run (or the next slot) checks out main, which
+# lacks the unsaved record, so it can upload that SAME video a second time (a duplicate upload, never a different
+# video). The slot guard and the posted check read state/posted only; there is no YouTube-side lookup.
+#
 # Security (public repo): this job runs no video code at all, only the repo's own autopilot/ Python from main. The
 # checkout does not persist credentials (tools/save_state.sh sets the push credential from GH_TOKEN, only in its step);
 # the YouTube secrets are visible to the posting step only; nothing user-influenced is interpolated into a script.
@@ -64,6 +70,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           bash tools/save_state.sh "Post: state $(date -u +%Y-%m-%dT%H:%MZ)"
+
+      # default success(): runs only when Post and Save progress both succeeded (a failed push must keep the assets)
+      - name: Cleanup posted assets
+        if: ${{ inputs.dry_run != true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python autopilot/publish.py cleanup
 
       - name: Queue report
         if: ${{ always() }}

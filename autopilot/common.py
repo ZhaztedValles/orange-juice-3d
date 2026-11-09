@@ -11,6 +11,8 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG = ROOT / "config.yml"
 STATE = ROOT / "state"
+VIDEOS = ROOT / "videos"
+TEMPLATE_IDS = ("000-bridge",)      # the template is never queued or posted, whatever its files say
 # Queue files are <id>.mp4 + <id>.yml; the id is the video folder name (same pattern as tools/video_check.py)
 ID_RE = re.compile(r"\d{3}-[a-z0-9-]{3,50}")
 NAME_RE = re.compile(r"^(\d{3}-[a-z0-9-]{3,50})\.(mp4|yml)$")
@@ -96,6 +98,42 @@ def load_approved():
 def load_render_states():
     d = STATE / "render"
     return {p.stem: json.loads(p.read_text(encoding="utf-8")) for p in sorted(d.glob("*.json"))} if d.is_dir() else {}
+
+
+def is_template(vid, meta=None):
+    """True when vid must never be posted: a known template id, a queue yml with `template: true`, or (when the folder
+    exists) videos/<id>/meta.yml with `template: true`. An unreadable meta.yml counts as a template (fail closed)."""
+    if vid in TEMPLATE_IDS or (isinstance(meta, dict) and meta.get("template") is True):
+        return True
+    p = VIDEOS / vid / "meta.yml"
+    if not p.exists():
+        return False
+    try:
+        data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return True
+    return isinstance(data, dict) and data.get("template") is True
+
+
+class ConfigError(RuntimeError):
+    pass
+
+
+_MISSING = object()
+BOOL_KEYS = ("paused", "require_approval", "youtube.enabled", "youtube.made_for_kids", "youtube.contains_synthetic_media")
+
+
+def check_config(cfg):
+    """these flags must be real YAML booleans (a quoted "false" is truthy in Python): raises ConfigError otherwise"""
+    bad = []
+    for path in BOOL_KEYS:
+        node = cfg
+        for part in path.split("."):
+            node = node.get(part, _MISSING) if isinstance(node, dict) else _MISSING
+        if not isinstance(node, bool):
+            bad.append(f"{path} (got {'nothing' if node is _MISSING else repr(node)})")
+    if bad:
+        raise ConfigError("config.yml: these must be true or false, without quotes: " + "; ".join(bad))
 
 
 # ---------------------------------------------------------------- metadata

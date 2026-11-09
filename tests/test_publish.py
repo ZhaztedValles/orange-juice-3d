@@ -46,8 +46,8 @@ class FakeStore:
         if yml:
             self.files[f"{vid}.yml"] = yaml.safe_dump(meta).encode()
 
-    def ensure(self):
-        pass
+    def ensure(self):                     # posting and reporting only READ the release; creating it is the render job's work
+        raise AssertionError("store.ensure() must not be called while posting or reporting")
 
     def names(self):
         return sorted(self.files)
@@ -72,6 +72,7 @@ def env(tmp_path, monkeypatch):
     state = tmp_path / "state"
     (state / "posted").mkdir(parents=True)
     monkeypatch.setattr(common, "STATE", state)
+    monkeypatch.setattr(common, "VIDEOS", tmp_path / "videos")
     monkeypatch.setattr(common, "now", lambda: SLOT_TIME.astimezone(timezone.utc))
     for k in ("YT_CLIENT_ID", "YT_CLIENT_SECRET", "YT_REFRESH_TOKEN"):
         monkeypatch.setenv(k, "x")
@@ -113,12 +114,40 @@ def test_posts_in_window_and_writes_state_with_slot(env):
     assert datetime.fromisoformat(st["posted_at"]) == SLOT_TIME
 
 
-def test_removes_posted_assets_from_the_store(env):
+def test_posting_never_touches_the_queue_assets_cleanup_removes_them_after(env):
     env.store.add("001-alpha")
     env.store.add("002-beta")
     env.run()
+    assert env.store.deleted == [] and len(env.store.names()) == 4        # record written, assets still queued
+    assert publish.run_cleanup(env.store) == 0
     assert env.store.names() == ["002-beta.mp4", "002-beta.yml"]
     assert sorted(env.store.deleted) == ["001-alpha.mp4", "001-alpha.yml"]
+
+
+def test_cleanup_only_removes_ids_with_a_posted_record(env):
+    env.store.add("001-alpha")
+    env.store.files["notes.txt"] = b"x"
+    publish.run_cleanup(env.store)
+    assert env.store.deleted == [] and "001-alpha.mp4" in env.store.names()
+    common.write_posted("001-alpha", {"id": "001-alpha", "url": "u", "slot": "s", "posted_at": "t"})
+    env.store.add("001-alpha-two")               # a different id that merely shares a prefix stays
+    publish.run_cleanup(env.store)
+    assert env.store.names() == ["001-alpha-two.mp4", "001-alpha-two.yml", "notes.txt"]
+
+
+def test_cleanup_with_an_incomplete_pair_removes_the_leftover(env):
+    env.store.add("001-alpha", yml=False)
+    common.write_posted("001-alpha", {"id": "001-alpha", "url": "u", "slot": "s", "posted_at": "t"})
+    publish.run_cleanup(env.store)
+    assert env.store.names() == []
+
+
+def test_cleanup_delete_failure_is_a_warning_not_a_failure(env, capsys):
+    env.store.add("001-alpha")
+    common.write_posted("001-alpha", {"id": "001-alpha", "url": "u", "slot": "s", "posted_at": "t"})
+    env.store.fail_delete = True
+    assert publish.run_cleanup(env.store) == 0
+    assert "::warning::" in capsys.readouterr().out and len(env.store.names()) == 2
 
 
 def test_nothing_outside_the_window(env):
@@ -239,15 +268,43 @@ def test_template_is_never_posted(env):
     assert "000-bridge.mp4" in env.store.names()          # left alone, not deleted
 
 
-def test_already_posted_id_is_not_reposted_and_its_assets_are_cleaned(env, capsys):
+def test_already_posted_id_is_not_reposted_and_its_assets_are_left_for_cleanup(env, capsys):
     (env.state / "posted" / "001-alpha.json").write_text(json.dumps(
         {"id": "001-alpha", "url": "u", "slot": "2026-11-08T19:00", "posted_at": "x"}))
     env.store.add("001-alpha")
     env.store.add("002-beta")
     env.run()
     assert env.calls == ["Title 002-beta"]
-    assert env.store.names() == []
+    assert "001-alpha.mp4" in env.store.names() and env.store.deleted == []
     assert "already posted" in capsys.readouterr().out.lower()
+
+
+def test_dry_run_leaves_already_posted_leftovers_untouched(env):
+    (env.state / "posted" / "001-alpha.json").write_text(json.dumps(
+        {"id": "001-alpha", "url": "u", "slot": "2026-11-08T19:00", "posted_at": "x"}))
+    env.store.add("001-alpha")
+    env.store.add("002-beta")
+    assert env.run(dry=True) == 0
+    assert env.store.deleted == [] and len(env.store.names()) == 4 and env.calls == []
+
+
+def test_template_folder_and_template_id_are_never_posted(env):
+    (common.VIDEOS / "001-alpha").mkdir(parents=True)
+    (common.VIDEOS / "001-alpha" / "meta.yml").write_text("title: T\ntemplate: true\n", encoding="utf-8")
+    env.store.add("000-bridge")                                   # no `template` flag in its queue yml at all
+    env.store.add("001-alpha")                                    # flagged only in its video folder
+    env.store.add("002-beta")
+    env.run()
+    assert env.posted() == ["002-beta"]
+    assert common.is_template("000-bridge") and common.is_template("001-alpha") and not common.is_template("002-beta")
+
+
+def test_unreadable_video_meta_counts_as_template(env):
+    (common.VIDEOS / "001-alpha").mkdir(parents=True)
+    (common.VIDEOS / "001-alpha" / "meta.yml").write_text("title: [unclosed\n", encoding="utf-8")
+    env.store.add("001-alpha")
+    env.run()
+    assert env.calls == []
 
 
 def test_incomplete_and_bad_names_are_skipped_with_a_warning(env, capsys):
@@ -320,25 +377,38 @@ def test_upload_failure_exits_1_and_keeps_everything(env, monkeypatch, capsys):
     assert "quotaExceeded" in capsys.readouterr().out
 
 
-def test_asset_delete_failure_still_records_the_post(env, capsys):
-    env.store.fail_delete = True
-    env.store.add("001-alpha")
-    assert env.run() == 0
-    assert env.posted() == ["001-alpha"]
-    assert "::warning::" in capsys.readouterr().out
-    env.at(SLOT_TIME + timedelta(minutes=10))
-    env.run()
-    assert env.calls == ["Title 001-alpha"]               # never reposted
-
-
-def test_posted_leftover_after_failed_delete_is_not_reposted_in_a_later_slot(env):
-    env.store.fail_delete = True
+def test_posted_assets_left_in_the_queue_are_not_reposted_in_a_later_slot(env):
     env.store.add("001-alpha")
     env.run()
-    env.store.fail_delete = False
     env.at(SLOT_TIME + timedelta(days=1))
     env.run()
-    assert env.calls == ["Title 001-alpha"] and env.store.names() == []
+    assert env.calls == ["Title 001-alpha"]
+    publish.run_cleanup(env.store)
+    assert env.store.names() == []
+
+
+@pytest.mark.parametrize("path,value", [(("paused",), "false"), (("require_approval",), "true"),
+                                        (("youtube", "enabled"), "yes"), (("youtube", "made_for_kids"), "false"),
+                                        (("youtube", "contains_synthetic_media"), 0), (("paused",), None)])
+def test_non_boolean_config_flags_fail_with_a_clear_error(env, capsys, path, value):
+    cfg = base_cfg()
+    node = cfg
+    for k in path[:-1]:
+        node = node[k]
+    node[path[-1]] = value
+    env.store.add("001-alpha")
+    assert env.run(cfg) == 1
+    out = capsys.readouterr().out
+    assert "::error::" in out and ".".join(path) in out and "true or false" in out
+    assert env.calls == [] and env.posted() == []
+    assert env.run(cfg, dry=True) == 1
+    assert publish.run_report(cfg, env.store, str(env.tmp / "r")) == 1
+
+
+def test_missing_boolean_flag_fails(env):
+    cfg = base_cfg()
+    del cfg["youtube"]["made_for_kids"]
+    assert env.run(cfg) == 1
 
 
 def test_missing_secrets_fail_a_real_run_before_downloading(env, monkeypatch, capsys):
@@ -416,6 +486,29 @@ def test_report_counts_queue_held_and_days_left(env, capsys):
     assert "approved and queued: 2" in out
 
 
+def test_release_store_reads_never_create_the_release(monkeypatch):
+    calls = []
+
+    class R:
+        def __init__(self, rc=0, out="", err=""):
+            self.returncode, self.stdout, self.stderr = rc, out, err
+
+    def fake_run(cmd, **kw):
+        calls.append(cmd[1:3])
+        return R(1, "", "release not found")
+
+    monkeypatch.setattr(store.subprocess, "run", fake_run)
+    assert store.ReleaseStore().names() == []                   # no release yet = empty queue, and no `release create`
+    assert calls == [["release", "view"]]
+    monkeypatch.setattr(store.subprocess, "run", lambda cmd, **kw: R(1, "", "HTTP 401 bad credentials"))
+    with pytest.raises(RuntimeError, match="401"):
+        store.ReleaseStore().names()
+
+
+def test_local_store_names_does_not_create_the_folder(tmp_path):
+    assert store.LocalStore(tmp_path / "nope").names() == [] and not (tmp_path / "nope").exists()
+
+
 # ------------------------------------------------------------------ main()
 def test_main_runs_youtube_and_report(env, monkeypatch, capsys):
     cfg_file = env.tmp / "config.yml"
@@ -426,7 +519,9 @@ def test_main_runs_youtube_and_report(env, monkeypatch, capsys):
     assert publish.main() == 0 and env.posted() == ["001-alpha"]
     monkeypatch.setattr(sys, "argv", ["publish.py", "report"])
     assert publish.main() == 0
-    assert "queued: 0" in capsys.readouterr().out
+    assert "queued: 0" in capsys.readouterr().out                 # posted ids never count as queued, cleaned up or not
+    monkeypatch.setattr(sys, "argv", ["publish.py", "cleanup"])
+    assert publish.main() == 0 and env.store.names() == []
 
 
 # ------------------------------------------------------------------ ported helpers (FactPop common/store/youtube)
@@ -583,3 +678,14 @@ def test_post_workflow_follows_the_repo_security_conventions():
         assert has_secret == (s.get("name") == "Post to YouTube"), s.get("name")
     assert "GH_TOKEN" not in job.get("env", {}) and "GH_TOKEN" not in wf.get("env", {})
     assert "tools/save_state.sh" in text
+
+
+def test_workflow_cleans_up_only_after_a_successful_save():
+    steps = _workflow()["jobs"]["post"]["steps"]
+    names = [s.get("name") for s in steps]
+    save, clean = steps[names.index("Save progress")], steps[names.index("Cleanup posted assets")]
+    assert names.index("Post to YouTube") < names.index("Save progress") < names.index("Cleanup posted assets")
+    assert "always()" not in clean["if"] and "failure()" not in clean["if"]    # implicit success(): save must have passed
+    assert "dry_run != true" in clean["if"] and "dry_run != true" in save["if"]
+    assert clean["run"].strip() == "python autopilot/publish.py cleanup"
+    assert "KNOWN RESIDUAL" in WORKFLOW.read_text(encoding="utf-8")

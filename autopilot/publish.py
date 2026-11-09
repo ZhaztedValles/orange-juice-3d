@@ -1,14 +1,17 @@
 """Orange Juice Productions: posting.
 
   python autopilot/publish.py youtube [--dry-run]   # post the next queued Short if a slot is open
+  python autopilot/publish.py cleanup               # delete the queue assets of ids that have a posted record
   python autopilot/publish.py report                # queue depth, held count, days of videos left
 
 One feed, no playlists. `youtube` is triggered by cron-job.org at each slot (GitHub's own cron is the backup) and never
 by hand. A run posts only when it is inside a slot's window (slot <= now < slot + slot_window_minutes, Manila time) and
 no post is logged for that slot yet (state/posted/*.json, field `slot`), so two triggers for one slot never double-post.
 It posts the lowest queued id (with require_approval: the lowest id listed in state/approved.yml), records
-state/posted/<id>.json = {id, url, slot, posted_at} and deletes the two assets from the queue release.
-Template videos (`template: true`) and ids that already have a posted record are never posted.
+state/posted/<id>.json = {id, url, slot, posted_at} and STOPS: it never touches the queue release. The workflow saves
+state/ first and only then runs `cleanup`, so a failed save leaves the video queued (retried, not replaced by another).
+Template videos (`template: true` in the queue yml or videos/<id>/meta.yml, or id 000-bridge) and ids that already
+have a posted record are never posted. `youtube` and `report` only read the release; nothing here creates it.
 --dry-run changes nothing: it prints the window, the pick and (with secrets) the channel name.
 """
 import argparse
@@ -64,7 +67,6 @@ def slot_key(start):
 
 def load_queue(store, tmp, cfg):
     """(good items with .meta, problems). Templates are marked item.template; invalid ones are reported and dropped."""
-    store.ensure()
     items, problems = common.group_assets(store.names())
     if items:
         store.download("*.yml", tmp)
@@ -75,7 +77,7 @@ def load_queue(store, tmp, cfg):
         except Exception as e:  # noqa: BLE001
             problems.append(f"{it.yml} isn't valid YAML: {e}")
             continue
-        it.template = isinstance(it.meta, dict) and it.meta.get("template") is True
+        it.template = common.is_template(it.id, it.meta)
         errs = [] if it.template else common.validate_meta(it.meta, cfg)
         if errs:
             problems += [f"{it.id}: {e}" for e in errs]
@@ -86,16 +88,22 @@ def load_queue(store, tmp, cfg):
     return good, problems
 
 
-def _delete_assets(store, it):
-    """delete the item's two assets; a failure is a warning (returns False), never fatal"""
-    ok = True
-    for name in (it.mp4, it.yml):
+def run_cleanup(store):
+    """delete the queue assets (<id>.mp4 / <id>.yml) of every id that has a state/posted record. A failed delete is a
+    warning: the next run tries again, and a posted id is never re-posted whether or not its assets are still there."""
+    posted = common.load_posted()
+    removed = 0
+    for name in store.names():
+        m = common.NAME_RE.match(name)
+        if not m or m.group(1) not in posted:
+            continue
         try:
             store.delete(name)
+            removed += 1
         except Exception as e:  # noqa: BLE001
-            ok = False
             print(f"::warning::Could not delete {name} from the queue release: {e}")
-    return ok
+    summary(f"Cleanup: removed {removed} posted asset(s) from the queue release")
+    return 0
 
 
 def _dry_connection_check(cfg):
@@ -113,12 +121,24 @@ def _dry_connection_check(cfg):
         return 1
 
 
+def _config_ok(cfg):
+    try:
+        common.check_config(cfg)
+        return True
+    except common.ConfigError as e:
+        summary(str(e))
+        print(f"::error::{e}")
+        return False
+
+
 def run_youtube(cfg, store, tmp, dry):
-    yc = cfg.get("youtube") or {}
-    if cfg.get("paused"):
+    if not _config_ok(cfg):
+        return 1
+    yc = cfg["youtube"]
+    if cfg["paused"]:
         summary("Paused (`paused: true` in config.yml). Nothing was done.")
         return 0
-    if not yc.get("enabled"):
+    if not yc["enabled"]:
         summary("YouTube posting is turned off in config.yml")
         return 0
 
@@ -149,11 +169,8 @@ def run_youtube(cfg, store, tmp, dry):
     items, _ = load_queue(store, tmp, cfg)
     candidates = []
     for it in items:
-        if it.id in posted:                       # posted earlier but the assets were left behind: never re-post
-            print(f"::warning::{it.id} is already posted ({posted[it.id].get('url')}); "
-                  + ("would remove" if dry else "removing") + " its leftover queue assets")
-            if not dry:
-                _delete_assets(store, it)
+        if it.id in posted:                       # posted earlier, assets not cleaned up yet: never re-post
+            print(f"::warning::{it.id} is already posted ({posted[it.id].get('url')}); skipped (`cleanup` removes its assets)")
         elif it.template:
             print(f"::warning::{it.id} is a template: never posted")
         else:
@@ -163,7 +180,7 @@ def run_youtube(cfg, store, tmp, dry):
         summary("Queue is empty: nothing to post.")
         print("::warning::Queue is empty")
         return rc_dry
-    if cfg.get("require_approval"):
+    if cfg["require_approval"]:
         approved = set(common.load_approved())
         waiting = candidates
         candidates = [it for it in candidates if it.id in approved]
@@ -187,13 +204,13 @@ def run_youtube(cfg, store, tmp, dry):
         return 1
     # the upload happened: record it first, so nothing below can ever cause a second post
     common.write_posted(it.id, {"id": it.id, "url": res["url"], "slot": key, "posted_at": common.iso()})
-    summary(f"Posted {it.id}: {res['url']}")
-    if not _delete_assets(store, it):
-        summary("The post is recorded, but its assets are still in the queue release (they are never re-posted).")
+    summary(f"Posted {it.id}: {res['url']} (its assets stay queued until `cleanup` runs after the state is saved)")
     return 0
 
 
 def run_report(cfg, store, tmp):
+    if not _config_ok(cfg):
+        return 1
     posted = common.load_posted()
     items, _ = load_queue(store, tmp, cfg)
     queued = [i for i in items if not i.template and i.id not in posted]
@@ -213,9 +230,11 @@ def run_report(cfg, store, tmp):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["youtube", "report"])
+    ap.add_argument("mode", choices=["youtube", "cleanup", "report"])
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
+    if a.mode == "cleanup":
+        return run_cleanup(get_store())
     cfg = common.load_config()
     with tempfile.TemporaryDirectory() as tmp:
         if a.mode == "youtube":
