@@ -1,0 +1,4 @@
+kokoro==0.9.4
+soundfile==0.13.1
+misaki[en]==0.9.4
+# kokoro also needs espeak-ng (apt install espeak-ng on Linux CI) as the fallback for unknown words

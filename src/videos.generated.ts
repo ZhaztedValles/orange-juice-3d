@@ -2,9 +2,10 @@
 import type React from "react";
 import type { Word } from "./engine/captions";
 import V000, { FRAMES as F000 } from "../videos/000-bridge/Video";
+import W000 from "../videos/000-bridge/words.json";
 
 export type VideoEntry = { id: string; Component: React.FC; frames: number; words: Word[] | null };
 
 export const VIDEOS: VideoEntry[] = [
-  { id: "000-bridge", Component: V000, frames: F000, words: null },
+  { id: "000-bridge", Component: V000, frames: F000, words: W000 as Word[] },
 ];
