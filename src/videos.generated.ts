@@ -7,6 +7,8 @@ import V001, { FRAMES as F001 } from "../videos/001-fern-in-a-jar/Video";
 import W001 from "../videos/001-fern-in-a-jar/words.json";
 import V002, { FRAMES as F002 } from "../videos/002-hotel-on-rails/Video";
 import W002 from "../videos/002-hotel-on-rails/words.json";
+import V003, { FRAMES as F003 } from "../videos/003-rocket-mail-scarp/Video";
+import W003 from "../videos/003-rocket-mail-scarp/words.json";
 
 export type VideoEntry = { id: string; Component: React.FC; frames: number; words: Word[] | null };
 
@@ -14,4 +16,5 @@ export const VIDEOS: VideoEntry[] = [
   { id: "000-bridge", Component: V000, frames: F000, words: W000 as Word[] },
   { id: "001-fern-in-a-jar", Component: V001, frames: F001, words: W001 as Word[] },
   { id: "002-hotel-on-rails", Component: V002, frames: F002, words: W002 as Word[] },
+  { id: "003-rocket-mail-scarp", Component: V003, frames: F003, words: W003 as Word[] },
 ];

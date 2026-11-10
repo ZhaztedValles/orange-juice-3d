@@ -33,3 +33,14 @@
   reason: ""
   video: 002-hotel-on-rails
   date: "2026-11-10"
+- id: 003-rocket-mail-scarp
+  claim: "In July 1934 the German rocket enthusiast Gerhard Zucker tried to send over a thousand letters by rocket from the Scottish island of Scarp to Harris, but the rocket exploded just above the beach and scattered the scorched mail."
+  topics: [rocket-mail, scarp, zucker, letters]
+  sources:
+    - https://cabinetmagazine.org/issues/23/turner2.php
+    - https://www.smithsonianmag.com/daily-planet/department-of-what-were-they-thinking-25283814
+  scores: {strange: 5, obscurity: 4, people: 4, visual: 4, provable: 4}
+  status: coded
+  reason: ""
+  video: 003-rocket-mail-scarp
+  date: "2026-11-10"
