@@ -146,8 +146,8 @@ export class World {
     M.sand = lam("sand", () => ({ color: "#e2c992" }));
     M.bluff = lam("bluffSand", () => ({ color: "#cfae78" }));
     M.snow = lam("snowPatch", () => ({ color: "#eef3f9" }));
-    b.add(quadUp(-900, 900, -900, -30, 450, 217.5), M.grass);
-    b.add(quadUp(-900, 900, -58, -30, 1, 1, 0.012), M.sand);
+    b.add(quadUp(-900, 900, -900, -58, 450, 210.5), M.grass); // abuts the sand strip: no coplanar overlap (z-fighting)
+    b.add(quadUp(-900, 900, -58, -30, 1, 1), M.sand);
     b.add(wallQuad(-900, 900, -30, 1), M.bluff);
     b.add(quadUp(-900, 900, -30, 900, 225, 450, -0.6 - D0), M.bed);
     b.add(quadUp(SNOW[0] - 30, SNOW[0] + 30, SNOW[2] - 30, SNOW[2] + 30, 1, 1, 0.05), M.snow);
@@ -378,7 +378,7 @@ export class World {
     const ts = clock(id, t), sh = shift(id, t), hz = hotelZ(id, t), lf = lift(ts);
     this.hotel.position.set(0, D0 + lf, hz);
     this.flag.rotation.y = 0.25 * Math.sin(t * 3.1); this.flag.scale.y = 1 + 0.04 * Math.sin(t * 5.3);
-    this.cars.visible = ts >= CARS_T - 0.02;
+    this.cars.visible = ts >= CARS_T;
     this.cars.position.set(0, D0 + lf - 0.0, -sh + carOff(ts));
     this.cars.position.y = 0;
     this.tracks.forEach((g, i) => { g.visible = ts >= TRACK_T + i * 0.06; });

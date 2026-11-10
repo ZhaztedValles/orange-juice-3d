@@ -230,6 +230,9 @@ modules" sections before you write code.
      `[a - x/2, a + x/2]` per crossfade, `flash` as `[FLASH_AT, FLASH_AT + 4]`, `planned` for deliberate holds,
      impact kicks and **every in-shot camera cut** (`[N, N]` for each `{ f: N, cut: true }` key in `CAMS`; an unlisted
      cut counts as a "pop" and the render holds the video; `tools/writer_check.py` checks this);
+     other pops the render also holds on (video 002): an object or effect card that appears or vanishes mid-shot
+     (make it appear/vanish exactly on a cut frame, or fade it), and ground planes stacked a few cm apart (they
+     z-fight and flicker at distance; make ground quads abut, never overlap);
    - `audio.json`: moods only from `hook playful march warm tension mystery sad none`, covering 0 to `FRAMES / 30`;
      SFX kinds only from the list in `docs/video-format.md` (with `dur` exactly for the kinds marked dur).
 3. `FRAMES` is 1650-2100 and at least the voice length; about voice seconds + 2, times 30 (bridge: 65.5 s voice,

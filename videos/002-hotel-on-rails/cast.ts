@@ -89,7 +89,7 @@ const owner = (id: number, t: number, ts: number, cam: CamInfo, out: Stage) => {
   personAt(cam, t, out, 1, OWNER, "owner", x, y, z, expr, 1.04);
   if (id === 4 && t < 20.5) {
     const k = t < 18.1 ? 0 : 1;
-    if (t > 16.95 && t < 20.5) out.fx.push({ key: `thought${k}`, cw: 400, ch: 360, draw: (p) => drawThought(p, k), x: x + 1.0, y: y + 2.8, z: z + 0.1, w: 1.5, h: 1.35 });
+    if (t > 16.95 && t < 618 / 30) out.fx.push({ key: `thought${k}`, cw: 400, ch: 360, draw: (p) => drawThought(p, k), x: x + 1.0, y: y + 2.8, z: z + 0.1, w: 1.5, h: 1.35 });
   }
 };
 

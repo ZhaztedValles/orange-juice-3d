@@ -30,7 +30,7 @@ export const shift = (id: number, t: number) => (id === 1 ? 15 + 0.7 * t : lin(S
 export const clock = (id: number, t: number) => (id === 1 ? 40 : t);
 export const LIFT = 1.05;
 export const lift = (ts: number) => LIFT * smooth((ts - 22.5) / 1.5);
-export const CARS_T = 23.6; // flatcars slide in under the hotel
+export const CARS_T = 710 / 30; // flatcars slide in under the hotel (appear exactly on the cut at f 710)
 export const carOff = (ts: number) => -(1 - easeOut(clamp01((ts - CARS_T) / 1.5))) * 22;
 export const TRACK_T = 25.2; // two dozen tracks laid, one every 0.06 s
 export const LOCOS_T = 27.3; // five more locomotives roll up
