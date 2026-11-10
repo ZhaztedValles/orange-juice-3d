@@ -1,0 +1,148 @@
+{
+ "music": [
+  {
+   "from": 0.0,
+   "to": 5.87,
+   "mood": "hook"
+  },
+  {
+   "from": 5.87,
+   "to": 22.4,
+   "mood": "playful"
+  },
+  {
+   "from": 22.4,
+   "to": 30.6,
+   "mood": "tension"
+  },
+  {
+   "from": 30.6,
+   "to": 34.5,
+   "mood": "warm"
+  },
+  {
+   "from": 34.5,
+   "to": 37.2,
+   "mood": "mystery"
+  },
+  {
+   "from": 37.2,
+   "to": 53.4,
+   "mood": "playful"
+  },
+  {
+   "from": 53.4,
+   "to": 66.0,
+   "mood": "warm"
+  }
+ ],
+ "key": "F",
+ "bpm": 112,
+ "sfx": [
+  {
+   "t": 0.0,
+   "kind": "breeze",
+   "dur": 5.8,
+   "gain_db": -10
+  },
+  {
+   "t": 0.0,
+   "kind": "water_bed",
+   "dur": 5.8,
+   "gain_db": -12
+  },
+  {
+   "t": 5.82,
+   "kind": "whoosh",
+   "dur": 0.6,
+   "gain_db": -6
+  },
+  {
+   "t": 5.9,
+   "kind": "bird_chirps",
+   "dur": 4.8,
+   "gain_db": -16
+  },
+  {
+   "t": 10.85,
+   "kind": "water_bed",
+   "dur": 6.8,
+   "gain_db": -10
+  },
+  {
+   "t": 10.85,
+   "kind": "breeze",
+   "dur": 6.8,
+   "gain_db": -12
+  },
+  {
+   "t": 17.66,
+   "kind": "breeze",
+   "dur": 16.8,
+   "gain_db": -11
+  },
+  {
+   "t": 17.66,
+   "kind": "water_bed",
+   "dur": 20.4,
+   "gain_db": -12
+  },
+  {
+   "t": 20.3,
+   "kind": "clink",
+   "dur": 0.5,
+   "gain_db": -8
+  },
+  {
+   "t": 23.3,
+   "kind": "clink",
+   "dur": 0.4,
+   "gain_db": -10
+  },
+  {
+   "t": 29.55,
+   "kind": "clink",
+   "dur": 0.4,
+   "gain_db": -9
+  },
+  {
+   "t": 30.62,
+   "kind": "whoosh",
+   "dur": 1.4,
+   "gain_db": -12
+  },
+  {
+   "t": 40.6,
+   "kind": "creak",
+   "dur": 0.9,
+   "gain_db": -14
+  },
+  {
+   "t": 48.9,
+   "kind": "stroll_step",
+   "gain_db": -14
+  },
+  {
+   "t": 49.6,
+   "kind": "stroll_step",
+   "gain_db": -14
+  },
+  {
+   "t": 50.3,
+   "kind": "stroll_step",
+   "gain_db": -14
+  },
+  {
+   "t": 53.5,
+   "kind": "crickets",
+   "dur": 12.4,
+   "gain_db": -18
+  },
+  {
+   "t": 59.2,
+   "kind": "water_bed",
+   "dur": 6.7,
+   "gain_db": -14
+  }
+ ]
+}
