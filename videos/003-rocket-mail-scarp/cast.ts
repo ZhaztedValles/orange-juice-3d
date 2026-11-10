@@ -137,8 +137,10 @@ const fireSet = (id: number, t: number, cam: CamInfo, out: Stage) => {
   const [sx, , sz] = SNOW;
   const a: Outfit = townsfolk(2), b: Outfit = { ...townsfolk(4), hat: "cap", cap: "#8c3b4a" };
   const t1 = 41.55 - LEAD; // "goes up" -> the pile flares
-  const L = id === 7 ? 0.25 + 0.1 * Math.sin(t * 2.2) : Math.min(1, Math.max(0.1, (t - 40.2) / (t1 - 40.2 + 1e-6)) ** 2.2);
-  const lq = q(L, 10);
+  // the flare grows a little every frame (a smootherstep ramp, quantised per frame) so the card never jumps between sizes
+  const u = Math.min(1, Math.max(0, (t - 40.2) / (t1 - 40.2)));
+  const L = id === 7 ? 0.25 + 0.1 * Math.sin(t * 2.2) : 0.1 + 0.9 * u * u * u * (u * (u * 6 - 15) + 10);
+  const lq = q(L, 120);
   const kind = id === 7 ? 0 : 1;
   out.fx.push({ key: `fire${kind}_${lq}`, cw: 500, ch: 500, draw: (p) => drawFire(p, kind, lq), x: id === 7 ? sx - 1.2 : sx + 2.2, y: D0 + (id === 7 ? 0.95 : 1.15 + 0.6 * lq) - 0.1, z: sz + 0.2, w: id === 7 ? 1.9 : 2.3, h: id === 7 ? 1.9 : 2.3 + 1.2 * lq });
   personAt(cam, t, out, 200, a, "fa", sx - 2.7, D0, sz - 0.2, id === 7 ? (t < 37 ? "neutral" : "smile") : "neutral", 1);
