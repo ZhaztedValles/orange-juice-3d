@@ -20,7 +20,7 @@ name: post
 on:
   schedule:
     - cron: "5 11 * * *"        # backup: 19:05 Manila (cron-job.org fires at 19:00)
-    - cron: "35 4 * * *"        # temporary backup for the one-day 12:30 slot (2026-11-10); remove with it
+    - cron: "5 4 * * *"         # temporary backup for the one-day 12:00 slot (2026-11-10); remove with it
   workflow_dispatch:
     inputs:
       dry_run:
