@@ -1,0 +1,324 @@
+{
+ "music": [
+  {
+   "from": 0,
+   "to": 6.24,
+   "mood": "hook"
+  },
+  {
+   "from": 6.24,
+   "to": 18.45,
+   "mood": "playful"
+  },
+  {
+   "from": 18.45,
+   "to": 31.3,
+   "mood": "tension"
+  },
+  {
+   "from": 31.3,
+   "to": 36.9,
+   "mood": "mystery"
+  },
+  {
+   "from": 36.9,
+   "to": 47.24,
+   "mood": "warm"
+  },
+  {
+   "from": 47.24,
+   "to": 51.88,
+   "mood": "mystery"
+  },
+  {
+   "from": 51.88,
+   "to": 55.3,
+   "mood": "tension"
+  },
+  {
+   "from": 55.3,
+   "to": 60.11,
+   "mood": "playful"
+  },
+  {
+   "from": 60.11,
+   "to": 68.0,
+   "mood": "warm"
+  }
+ ],
+ "key": "D",
+ "bpm": 108,
+ "sfx": [
+  {
+   "t": 0.0,
+   "kind": "water_bed",
+   "dur": 2.0,
+   "gain_db": -10,
+   "pan": 0.0
+  },
+  {
+   "t": 0.3,
+   "kind": "whoosh",
+   "dur": 1.4,
+   "gain_db": -10,
+   "pan": 0.0
+  },
+  {
+   "t": 2.0,
+   "kind": "water_bed",
+   "dur": 4.2,
+   "gain_db": -8,
+   "pan": 0.0
+  },
+  {
+   "t": 3.7,
+   "kind": "push_thump",
+   "gain_db": -6,
+   "pan": 0.0
+  },
+  {
+   "t": 5.0,
+   "kind": "water_bed",
+   "dur": 1.2,
+   "gain_db": -6,
+   "pan": 0.0
+  },
+  {
+   "t": 6.2,
+   "kind": "whoosh",
+   "dur": 0.6,
+   "gain_db": -6,
+   "pan": 0.0
+  },
+  {
+   "t": 6.3,
+   "kind": "water_bed",
+   "dur": 4.6,
+   "gain_db": -14,
+   "pan": 0.0
+  },
+  {
+   "t": 6.3,
+   "kind": "bird_chirps",
+   "dur": 4.4,
+   "gain_db": -18,
+   "pan": 0.0
+  },
+  {
+   "t": 8.9,
+   "kind": "flag_flutter",
+   "dur": 2.1,
+   "gain_db": -16,
+   "pan": 0.0
+  },
+  {
+   "t": 11.0,
+   "kind": "creak",
+   "dur": 4.2,
+   "gain_db": -14,
+   "pan": 0.0
+  },
+  {
+   "t": 15.2,
+   "kind": "water_bed",
+   "dur": 3.3,
+   "gain_db": -12,
+   "pan": 0.0
+  },
+  {
+   "t": 15.2,
+   "kind": "breeze",
+   "dur": 3.3,
+   "gain_db": -12,
+   "pan": 0.0
+  },
+  {
+   "t": 17.55,
+   "kind": "splash_big",
+   "gain_db": -4,
+   "pan": 0.2
+  },
+  {
+   "t": 18.5,
+   "kind": "water_bed",
+   "dur": 12.8,
+   "gain_db": -11,
+   "pan": 0.0
+  },
+  {
+   "t": 18.86,
+   "kind": "creak",
+   "dur": 1.4,
+   "gain_db": -6,
+   "pan": 0.0
+  },
+  {
+   "t": 20.8,
+   "kind": "push_thump",
+   "gain_db": -6,
+   "pan": -0.3
+  },
+  {
+   "t": 21.9,
+   "kind": "whoosh",
+   "dur": 1.2,
+   "gain_db": -10,
+   "pan": 0.0
+  },
+  {
+   "t": 23.88,
+   "kind": "bolt_strain",
+   "dur": 1.0,
+   "gain_db": -4,
+   "pan": 0.0
+  },
+  {
+   "t": 23.9,
+   "kind": "chain_groan",
+   "dur": 1.1,
+   "gain_db": -8,
+   "pan": 0.0
+  },
+  {
+   "t": 25.06,
+   "kind": "bolt_snap",
+   "gain_db": -2,
+   "pan": 0.0
+  },
+  {
+   "t": 25.08,
+   "kind": "wood_crack",
+   "gain_db": -6,
+   "pan": 0.0
+  },
+  {
+   "t": 27.12,
+   "kind": "push_thump",
+   "gain_db": 0,
+   "pan": 0.0
+  },
+  {
+   "t": 27.14,
+   "kind": "hammer_hit",
+   "gain_db": -8,
+   "pan": 0.0
+  },
+  {
+   "t": 29.3,
+   "kind": "rattle",
+   "dur": 2.0,
+   "gain_db": -14,
+   "pan": 0.0
+  },
+  {
+   "t": 31.3,
+   "kind": "creak",
+   "dur": 3.0,
+   "gain_db": -12,
+   "pan": 0.0
+  },
+  {
+   "t": 31.3,
+   "kind": "water_bed",
+   "dur": 5.6,
+   "gain_db": -14,
+   "pan": 0.0
+  },
+  {
+   "t": 36.9,
+   "kind": "water_bed",
+   "dur": 10.3,
+   "gain_db": -16,
+   "pan": 0.0
+  },
+  {
+   "t": 47.2,
+   "kind": "water_bed",
+   "dur": 4.7,
+   "gain_db": -14,
+   "pan": 0.0
+  },
+  {
+   "t": 49.5,
+   "kind": "chain_groan",
+   "dur": 1.8,
+   "gain_db": -8,
+   "pan": 0.0
+  },
+  {
+   "t": 49.6,
+   "kind": "rattle",
+   "dur": 1.6,
+   "gain_db": -12,
+   "pan": 0.0
+  },
+  {
+   "t": 52.3,
+   "kind": "bolt_strain",
+   "dur": 1.8,
+   "gain_db": -6,
+   "pan": 0.0
+  },
+  {
+   "t": 54.18,
+   "kind": "whoosh",
+   "dur": 1.2,
+   "gain_db": -2,
+   "pan": 0.0
+  },
+  {
+   "t": 54.22,
+   "kind": "splash_big",
+   "gain_db": -4,
+   "pan": 0.0
+  },
+  {
+   "t": 55.3,
+   "kind": "whoosh",
+   "dur": 2.2,
+   "gain_db": -8,
+   "pan": 0.0
+  },
+  {
+   "t": 57.55,
+   "kind": "splash_big",
+   "gain_db": -2,
+   "pan": 0.1
+  },
+  {
+   "t": 57.6,
+   "kind": "water_bed",
+   "dur": 2.5,
+   "gain_db": -10,
+   "pan": 0.0
+  },
+  {
+   "t": 58.8,
+   "kind": "whoa",
+   "dur": 0.8,
+   "gain_db": -12,
+   "pan": 0.0
+  },
+  {
+   "t": 60.1,
+   "kind": "water_bed",
+   "dur": 2.7,
+   "gain_db": -14,
+   "pan": 0.0
+  },
+  {
+   "t": 62.7,
+   "kind": "bird_chirps",
+   "dur": 5.0,
+   "gain_db": -18,
+   "pan": 0.0
+  },
+  {
+   "t": 62.75,
+   "kind": "applause",
+   "dur": 2.6,
+   "gain_db": -16,
+   "pan": 0.0
+  }
+ ]
+}

@@ -56,3 +56,14 @@
   reason: ""
   video: 004-franklin-oil-pond
   date: "2026-11-11"
+- id: 005-submarine-kiel-escape
+  claim: "On the first of February 1851 Wilhelm Bauer and his two crewmen were trapped about sixteen metres down in Kiel harbour when his submarine Brandtaucher sank, and escaped hours later by letting it flood until the trapped air could blow the hatch open."
+  topics: [brandtaucher, submarine, kiel, escape]
+  sources:
+    - https://www.dhmjournal.com/images/IndividArticles/29June/Elliot_SPUMSJ.29.2.81-87.pdf
+    - https://en.wikipedia.org/wiki/Brandtaucher
+  scores: {strange: 5, obscurity: 4, people: 4, visual: 4, provable: 5}
+  status: coded
+  reason: ""
+  video: 005-submarine-kiel-escape
+  date: "2026-11-12"
