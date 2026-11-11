@@ -11,6 +11,8 @@ import V003, { FRAMES as F003 } from "../videos/003-rocket-mail-scarp/Video";
 import W003 from "../videos/003-rocket-mail-scarp/words.json";
 import V004, { FRAMES as F004 } from "../videos/004-franklin-oil-pond/Video";
 import W004 from "../videos/004-franklin-oil-pond/words.json";
+import V005, { FRAMES as F005 } from "../videos/005-submarine-kiel-escape/Video";
+import W005 from "../videos/005-submarine-kiel-escape/words.json";
 
 export type VideoEntry = { id: string; Component: React.FC; frames: number; words: Word[] | null };
 
@@ -20,4 +22,5 @@ export const VIDEOS: VideoEntry[] = [
   { id: "002-hotel-on-rails", Component: V002, frames: F002, words: W002 as Word[] },
   { id: "003-rocket-mail-scarp", Component: V003, frames: F003, words: W003 as Word[] },
   { id: "004-franklin-oil-pond", Component: V004, frames: F004, words: W004 as Word[] },
+  { id: "005-submarine-kiel-escape", Component: V005, frames: F005, words: W005 as Word[] },
 ];
