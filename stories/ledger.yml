@@ -67,3 +67,14 @@
   reason: ""
   video: 005-submarine-kiel-escape
   date: "2026-11-12"
+- id: 006-nollet-monk-chain
+  claim: "In 1746 the physicist Jean-Antoine Nollet linked about two hundred monks with iron wire in a ring about a mile around, discharged Leyden jars through them, and they all jumped at the same instant."
+  topics: [nollet, leyden-jar, monks, electricity]
+  sources:
+    - https://en.wikipedia.org/wiki/Jean-Antoine_Nollet
+    - https://ietarchivesblog.org/2017/11/07/abbe-jean-antoine-nollet-1700-1770-vs-benjamin-franklin-1706-1790/
+  scores: {strange: 5, obscurity: 4, people: 5, visual: 5, provable: 4}
+  status: coded
+  reason: ""
+  video: 006-nollet-monk-chain
+  date: "2026-11-13"
