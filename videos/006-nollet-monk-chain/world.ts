@@ -120,7 +120,7 @@ export class World {
     M.cloth = lam("tableTop", () => ({ color: "#efe6d2" }));
     M.wall = lam("gardenWall", () => ({ map: stoneHD("gardenWallHD") }));
     M.brass = lam("brass", () => ({ color: "#c9a047" }));
-    const gg = new THREE.PlaneGeometry(1800, 1800, 1, 1);
+    const gg = new THREE.PlaneGeometry(1800, 1800, 60, 60); // 30 m cells: one huge two-triangle quad lost its texture and fog depth on one frame (pop at 184)
     gg.rotateX(-Math.PI / 2); gg.translate(0, D0, 0);
     const uv = gg.getAttribute("uv") as THREE.BufferAttribute;
     for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * 450, uv.getY(i) * 450);
