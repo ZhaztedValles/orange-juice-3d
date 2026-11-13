@@ -1,0 +1,178 @@
+{
+ "music": [
+  {
+   "from": 0.0,
+   "to": 6.87,
+   "mood": "hook"
+  },
+  {
+   "from": 6.87,
+   "to": 12.07,
+   "mood": "playful"
+  },
+  {
+   "from": 12.07,
+   "to": 22.04,
+   "mood": "mystery"
+  },
+  {
+   "from": 22.04,
+   "to": 30.73,
+   "mood": "march"
+  },
+  {
+   "from": 30.73,
+   "to": 36.33,
+   "mood": "tension"
+  },
+  {
+   "from": 36.33,
+   "to": 46.33,
+   "mood": "playful"
+  },
+  {
+   "from": 46.33,
+   "to": 52.53,
+   "mood": "mystery"
+  },
+  {
+   "from": 52.53,
+   "to": 61.27,
+   "mood": "tension"
+  },
+  {
+   "from": 61.27,
+   "to": 68.2667,
+   "mood": "warm"
+  }
+ ],
+ "key": "F",
+ "bpm": 112,
+ "sfx": [
+  {
+   "t": 0.0,
+   "kind": "creak",
+   "dur": 6.8,
+   "gain_db": -8,
+   "pan": 0.1
+  },
+  {
+   "t": 0.3,
+   "kind": "stroll_step",
+   "gain_db": -6,
+   "pan": 0.2
+  },
+  {
+   "t": 2.1,
+   "kind": "oof",
+   "gain_db": -4,
+   "pan": 0.15
+  },
+  {
+   "t": 6.9,
+   "kind": "rattle",
+   "dur": 5.0,
+   "gain_db": -10,
+   "pan": -0.2
+  },
+  {
+   "t": 7.2,
+   "kind": "bird_chirps",
+   "dur": 4.5,
+   "gain_db": -14
+  },
+  {
+   "t": 12.1,
+   "kind": "breeze",
+   "dur": 9.9,
+   "gain_db": -14
+  },
+  {
+   "t": 23.4,
+   "kind": "whoa",
+   "dur": 1.2,
+   "gain_db": -6,
+   "pan": 0.2
+  },
+  {
+   "t": 28.41,
+   "kind": "push_thump",
+   "gain_db": -2
+  },
+  {
+   "t": 28.5,
+   "kind": "creak",
+   "dur": 2.2,
+   "gain_db": -6
+  },
+  {
+   "t": 28.9,
+   "kind": "oof",
+   "gain_db": -4,
+   "pan": -0.1
+  },
+  {
+   "t": 34.6,
+   "kind": "whoosh",
+   "dur": 1.4,
+   "gain_db": -4
+  },
+  {
+   "t": 34.9,
+   "kind": "wood_crack",
+   "gain_db": -8,
+   "pan": 0.3
+  },
+  {
+   "t": 36.4,
+   "kind": "bird_chirps",
+   "dur": 9.0,
+   "gain_db": -14
+  },
+  {
+   "t": 44.97,
+   "kind": "whoa",
+   "dur": 1.0,
+   "gain_db": -6
+  },
+  {
+   "t": 52.6,
+   "kind": "rattle",
+   "dur": 4.6,
+   "gain_db": -9
+  },
+  {
+   "t": 54.87,
+   "kind": "push_thump",
+   "gain_db": -3
+  },
+  {
+   "t": 55.0,
+   "kind": "oof",
+   "gain_db": -4
+  },
+  {
+   "t": 57.3,
+   "kind": "breeze",
+   "dur": 4.0,
+   "gain_db": -10
+  },
+  {
+   "t": 57.6,
+   "kind": "wood_crack",
+   "gain_db": -12,
+   "pan": -0.3
+  },
+  {
+   "t": 61.3,
+   "kind": "stroll_step",
+   "gain_db": -6
+  },
+  {
+   "t": 61.8,
+   "kind": "creak",
+   "dur": 4.5,
+   "gain_db": -9
+  }
+ ]
+}
