@@ -219,7 +219,10 @@ export const dofAt = (f: number) => {
   let i = 0; while (i + 1 < DOF.length && f >= DOF[i + 1].f) i++;
   const d = DOF[i], p = DOF[Math.max(0, i - 1)];
   const k = d.dur ? Math.min(1, (f - d.f) / d.dur) : 1;
-  return { cInf: p.cInf + (d.cInf - p.cInf) * k, focus: d.focus };
+  // the focus point glides with the blur (an instant focus jump at a blurred key reads as a pop)
+  const pf = p.focus, df = d.focus, e = glide(k);
+  const focus = pf && df && k < 1 ? (g: number): V3 => { const a = pf(g), b = df(g); return a.map((v, i) => v + (b[i] - v) * e) as V3; } : df;
+  return { cInf: p.cInf + (d.cInf - p.cInf) * k, focus };
 };
 
 /** near framing objects: Kenney models just in front of the lens for a few shots */
