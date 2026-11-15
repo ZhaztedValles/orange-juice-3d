@@ -19,6 +19,8 @@ import V007, { FRAMES as F007 } from "../videos/007-horse-flu-streetcars/Video";
 import W007 from "../videos/007-horse-flu-streetcars/words.json";
 import V008, { FRAMES as F008 } from "../videos/008-rumford-cannon-boil/Video";
 import W008 from "../videos/008-rumford-cannon-boil/words.json";
+import V009, { FRAMES as F009 } from "../videos/009-balloon-valve-teeth/Video";
+import W009 from "../videos/009-balloon-valve-teeth/words.json";
 
 export type VideoEntry = { id: string; Component: React.FC; frames: number; words: Word[] | null };
 
@@ -32,4 +34,5 @@ export const VIDEOS: VideoEntry[] = [
   { id: "006-nollet-monk-chain", Component: V006, frames: F006, words: W006 as Word[] },
   { id: "007-horse-flu-streetcars", Component: V007, frames: F007, words: W007 as Word[] },
   { id: "008-rumford-cannon-boil", Component: V008, frames: F008, words: W008 as Word[] },
+  { id: "009-balloon-valve-teeth", Component: V009, frames: F009, words: W009 as Word[] },
 ];

@@ -244,9 +244,9 @@ const yardSet = (id: number, t: number, cam: CamInfo, out: Stage) => {
     if (t >= T_MOTION - 0.07) { const u = ((t - T_MOTION) * 2) % 1; out.fx.push({ key: `creak${q(u, 10)}`, cw: 300, ch: 300, draw: (p) => fxCreak(p, q(u, 10)), x: 0.4, y: BOX.y1 + 0.5, z: 0.4, w: 0.6, h: 0.6 }); }
     front(cam, t, out, 20, WK1, "wk1", 2.6, 1.1, "smile");
   } else if (id === 12) {
-    const amp = 3 + 20 * smooth((t - T_SHOOK + 0.07) / 1.8) + 6 * smooth((t - T_SHAKING + 0.07) / 0.5), fk = Math.floor(t * 15) % 12;
+    const amp = 3 + 20 * smooth((t - T_SHOOK + 0.07) / 1.8) + 6 * smooth((t - T_SHAKING + 0.07) / 0.5), fk = Math.floor(t * 30) % 24;
     const ak = Math.round(amp);
-    out.fx.push({ key: `atoms${ak}_${fk}`, cw: 600, ch: 600, draw: (p) => drawAtoms(p, ak, fk), x: -0.4, y: AX + 0.95, z: 0.75, w: 1.15, h: 1.15 });
+    out.fx.push({ key: `atoms${ak}_${fk}`, cw: 600, ch: 600, draw: (p) => drawAtoms(p, ak, fk / 2), x: -0.4, y: AX + 0.95, z: 0.75, w: 1.15, h: 1.15 });
     front(cam, t, out, 1, RUM, "rum", -1.9, 1.3, t >= T_HEAT - 0.07 ? "grin" : "smile");
     void T_SHAKING;
   } else if (id === 13) {
