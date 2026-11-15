@@ -100,3 +100,14 @@
   reason: ""
   video: 008-rumford-cannon-boil
   date: "2026-11-15"
+- id: 009-balloon-valve-teeth
+  claim: "On the fifth of September 1862 the balloonists James Glaisher and Henry Coxwell rose more than five miles above Wolverhampton, Glaisher blacked out in the thin air, and Coxwell, who had lost the use of his hands, opened the valve with his teeth to bring them down."
+  topics: [glaisher, coxwell, balloon, altitude]
+  sources:
+    - https://www.metoffice.gov.uk/research/library-and-archive/archive-hidden-treasures/james-glaisher
+    - https://www.lindahall.org/about/news/scientist-of-the-day/henry-coxwell
+  scores: {strange: 5, obscurity: 4, people: 5, visual: 4, provable: 5}
+  status: coded
+  reason: ""
+  video: 009-balloon-valve-teeth
+  date: "2026-11-16"
