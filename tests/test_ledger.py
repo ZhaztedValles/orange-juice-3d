@@ -298,3 +298,13 @@ def test_kind_and_category_are_optional_but_checked():
     assert ledger.problems([{**GOOD, "kind": True, "category": "survival"}], BANNED) == []
     p = " ".join(ledger.problems([{**GOOD, "kind": "fiction", "category": "Not OK!"}], BANNED))
     assert "'kind'" in p and "'category'" in p
+
+
+def test_a_puzzle_needs_no_sources_or_strangeness_but_others_do():
+    puzzle = {**GOOD, "kind": "puzzle", "sources": [], "scores": {**GOOD["scores"], "strange": 1, "obscurity": 1}}
+    assert ledger.problems([puzzle], BANNED) == []
+    news = {**puzzle, "kind": "news"}
+    assert any("sources" in p for p in ledger.problems([news], BANNED))
+    assert ledger.problems([{**news, "sources": GOOD["sources"]}], BANNED) == []      # news need not be strange
+    crime = {**news, "kind": "true-crime", "sources": GOOD["sources"]}
+    assert any("strange" in p for p in ledger.problems([crime], BANNED))

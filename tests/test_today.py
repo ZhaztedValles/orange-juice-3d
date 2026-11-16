@@ -133,3 +133,10 @@ def test_queue_names_public_404_is_empty():
     def nf(url):
         raise urllib.error.HTTPError(url, 404, "Not Found", None, None)
     assert today.queue_names(_BrokenStore(), fetch=nf) == []
+
+
+def test_every_other_video_is_a_special_kind_in_turn():
+    assert [today.kind_for(n) for n in range(11, 20)] == [
+        "true", "what-if", "true", "news", "true", "legend", "true", "puzzle", "true"]
+    assert {today.kind_for(n) for n in range(2, 30, 2)} == set(today.SPECIAL_KINDS)
+    assert plan(videos=("000-bridge", "011-x"))["kind"] == today.kind_for(12)

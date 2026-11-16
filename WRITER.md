@@ -12,16 +12,38 @@ cloud session. Nobody will answer questions, so follow these steps in order, lit
    from there.
 1. If `config.yml` has `paused: true`, stop now: install nothing, write nothing, push nothing.
    If `tools/today.py` says paused, stop and do nothing.
-2. **Stories.** Strange stories on **any topic** (owner decision 2026-11-16: not only history and science), with
-   **people at the centre** and **something visual happening** that the 3D world can show. Three kinds:
-   - `true` (most videos): a real story, fact-checked on **2 or more independent reliable sources**;
-   - `legend`: a famous legend, myth or folk tale, told as a legend. The title must contain "Legend" or "Myth"
-     and the narration says it is a legend ("the legend says..."); the sources are about the legend;
-   - `what-if`: an alternate-history "What if...?" built on a real moment. The title must contain "What if"; the
+2. **Stories.** Strange stories on **any topic**, with **people at the centre** and **something visual happening**
+   that the 3D world can show. `tools/today.py` prints tonight's **kind** (owner decision 2026-11-16: every other
+   video is a special kind, taking turns). Make that kind. Only if 3 brainstorm rounds find nothing that passes the
+   rules, make a `true` story instead and say so in your summary. The kinds:
+   - `true`: a real story, fact-checked on **2 or more independent reliable sources**.
+   - `how-it-works`: a real "how did they do it?" story (a machine, a building move, a trick, a rescue), told through
+     the people who did it; fact-checked like `true`. The title contains "How".
+   - `countdown`: a real famous moment told as a countdown ("The last sixty seconds before..."), fact-checked like
+     `true`; the narration counts down the time.
+   - `true-crime`: a real crime that is **historical** (at least 50 years ago, or solved and closed), told through the
+     investigation or the trick behind it, fact-checked like `true`. **Nothing graphic**: no blood, no bodies, no
+     weapon used on screen, no named living victims or relatives. Respectful, never mocking a victim.
+   - `news`: a current story from **the last 14 days** (trend check, section 4): a launch, a release, a record, a
+     business or science story, a strange event. Fact-check on 2 **major news outlets** (Reuters, AP, BBC, the
+     Guardian, NYT, Bloomberg, The Verge and the like). About real people: say only what those outlets report; an
+     allegation is always "accused of" or "reported to", never stated as fact; no rumours, no private persons, no
+     politics or elections, no tragedy that is still unfolding, no medical or money advice. Brands, games and films:
+     never show their logos, characters, art or footage; our own cartoon world only (for example a game release is
+     told as the story of the fans, the studio, the wait, the record pre-orders).
+   - `legend`: a famous legend, myth or folk tale, told as a legend ("the legend says..."). The title contains
+     "Legend" or "Myth"; the sources are about the legend.
+   - `what-if`: an alternate-history "What if...?" built on a real moment. The title contains "What if"; the
      narration states the real history first, then clearly imagines the rest; the sources back the real part.
-   Never present anything invented as true. At most 1 in 3 videos is a legend or what-if. One feed, no playlists.
-   A story that 3 or more "fun facts" listicles already carry is too common: never use it. Never copy another
-   channel's script, characters or shots; a topic other channels covered is fine, told entirely our own way.
+   - `puzzle`: an **invented** whodunit or logic puzzle told as a short story (a murder mystery with 3 suspects, a
+     locked-room riddle, a who-is-lying puzzle). Every clue needed is said and shown; there is exactly one fair
+     answer. The narration ends by asking the viewer to comment their answer ("Who did it? Tell me in the
+     comments."). The title contains "Puzzle", "Can you", "Solve" or "Who did it". meta.yml has `kind: puzzle`,
+     `sources: []`, and the description ends with four blank lines and then `Answer: <the solution and why>`. Never
+     base a puzzle on a real crime or a real person.
+   Never present anything invented as true. A story that 3 or more "fun facts" listicles already carry is too common
+   for `true`, `how-it-works`, `countdown` and `true-crime`. Never copy another channel's script, characters or shots;
+   a topic other channels covered is fine, told entirely our own way.
 3. **What you may change.** Only `videos/<NNN-slug>/*` (a new folder, or a held one) and `stories/ledger.yml`,
    `stories/banned.yml`. Never `src/engine` or anything else in `src/` (the registry is regenerated locally, never
    committed), `.github`, `config.yml`, `state/` (including `state/approved.yml`), `tools`, `audio`, `scripts`,
@@ -115,33 +137,35 @@ mention it in your summary.
 
 0. **What people want right now (5 minutes at most).** Web-search what is trending: news of the week, anniversaries
    this week (`on this day <month> <day>`), Google Trends and YouTube trending topics, upcoming holidays and big
-   events. Note 3-5 themes. Prefer a candidate that connects to one (an anniversary, a place in the news, a holiday,
+   events. Note 3-5 themes. For a `news` night this is where the story comes from (spend up to 15 minutes). Otherwise prefer a candidate that connects to one (an anniversary, a place in the news, a holiday,
    a new film or game about the period). A trend is a bonus, never a reason to break the rules below; never use a
    tragedy that is still unfolding, or a story about a living private person.
 1. Brainstorm about 15 candidates across many corners: history, science, survival and rescue, heists and cons,
    unsolved mysteries, disasters and near-misses, inventions and their inventors, animals that people got involved
    with, sport oddities, strange laws, odd jobs, engineering mishaps, weather, exploration, legends and myths, and
-   "what if" moments. **Rotate:** read the `category` of the last 3 ledger entries and do not pick the same category
-   as the last one, nor a legend or what-if when one of the last 2 was. Each needs people on screen doing
+   "what if" moments, all within tonight's kind. **Rotate:** read the `category` of the last 3 ledger entries and do
+   not pick the same category as the last one. Each needs people on screen doing
    something, and a cause and effect you can animate with buildings, streets, water, fields, vehicles, crowds and
    simple props.
 2. Drop a candidate when any of these hold:
    - `python tools/ledger.py check "<claim>" --topics <topic1>,<topic2>,<topic3>` does not print `ok` (banned, the same
      story as a ledger entry, or 3+ shared topics). Topics are 1-8 lower-case words, the most specific first;
-   - the "fun facts" search test: web-search `<subject> fun facts` and `<subject> weird history`. If 3 or more
+   - (kinds `true`, `how-it-works`, `countdown`, `true-crime` only) the "fun facts" search test: web-search `<subject> fun facts` and `<subject> weird history`. If 3 or more
      listicle-style pages carry it, it is too common: append it to `stories/banned.yml` as
      `- {claim: "One accurate sentence.", keywords: [two, specific]}` (2 specific keywords; never edit or remove existing
      entries) and pick another. Run this search for every candidate you score;
    - it breaks a hard rule (section 1, item 10).
 3. Score each survivor 1-5: `strange`, `obscurity`, `people`, `visual`, `provable`. Keep only strange >= 4,
-   obscurity >= 3, people >= 3 (a trend connection may break a tie). Pick the best total. If none qualifies, brainstorm again (up to 3 rounds); after that,
+   obscurity >= 3, people >= 3 (a trend connection may break a tie). For `news`, `legend`, `what-if` and `puzzle`
+   only people >= 3 is required (`tools/ledger.py` checks this); score the rest honestly anyway. Pick the best total. If none qualifies, brainstorm again (up to 3 rounds); after that,
    make no new video tonight.
 4. Fact-check the pick on 2 independent reliable sources from different domains (encyclopedias, museums,
    universities, journals, archives, government or major news sites; Wikipedia counts as one source at most). Not listicles,
    forums, content farms, or two pages copying each other. Numbers, names and dates must match the sources; where they
    differ, say "about" and use the rounder figure. Also search `<subject> myth` and `<subject> debunked`: if the story is
    disputed, drop it and take the next candidate (a `legend` is checked as a legend: sources must agree on how
-   it is told; a `what-if` is checked on its real part).
+   it is told; a `what-if` is checked on its real part; `news` on 2 major news outlets dated in the last 14 days; a
+   `puzzle` has no sources: instead, re-read it as a viewer and make sure the clues give exactly one answer).
 5. Append the ledger entry at the end of `stories/ledger.yml` (existing entries are append-only: never edit or delete
    them, except the drop in section 3):
    ```yaml
@@ -156,7 +180,7 @@ mention it in your summary.
      reason: ""
      video: <id>
      date: "<YYYY-MM-DD from /tmp/oj-date>"
-     kind: "true"                      # "true" | legend | what-if (quote "true": bare true is a YAML boolean)
+     kind: "true"                      # tonight's kind from today.py (quote "true": bare true is a YAML boolean)
      category: survival                # one word or hyphenated phrase, for rotation
    ```
    `python tools/ledger.py validate` must print `ok`.
@@ -176,6 +200,22 @@ mention it in your summary.
      knows. `tools/writer_check.py` reports a problem when "You see," is missing. The sentence after "You see," is our
      own: never the bridge's ("every bridge has a rhythm") or its swing analogy.
    - **Ironic payoff:** the consequence, and a last line that twists or calls back to the hook.
+
+   Those beats (with the "You see," pivot, which `tools/writer_check.py` requires) are for `true` and
+   `how-it-works`. The other kinds keep the hook, the setting and the payoff, and change the middle:
+   - `countdown`: the hook names the moment; then 4-6 time stamps counting down ("sixty seconds... thirty
+     seconds..."), each a bigger detail; the payoff is what happened after.
+   - `true-crime`: the hook is the crime's strangest fact; then the trick, the investigation, the one clue that broke
+     the case; the payoff is how they were caught. No graphic beat.
+   - `news`: the hook is the surprising number or fact; then who, what, when (say the month), why people care; a
+     short "here is why it matters" beat; the payoff asks the viewer what they think.
+   - `legend`: "Legend says..." in the first line; the tale in 3-4 beats; then one line on what might really have
+     happened; a twist ending.
+   - `what-if`: the real moment in 2-3 beats; "But what if..." as the pivot; 2-3 imagined consequences, each
+     bigger; the payoff comes back to the real world.
+   - `puzzle`: the crime or riddle in the first line; the suspects (3 is best), each with one clue line; one
+     detail the attentive viewer can catch; the last line asks for the answer in the comments. Never say the
+     answer in the video.
 3. At the fixed voice speed (SPEED 1.2) Kokoro reads about 3.4 words/s. Aim for 205-230 words in the narration, so the
    voice lands at 55-68 s (writer_check accepts 3.3-4.1 words/s and a 55-70 s video). Numbers as words ("eighteen thirty-one", "seventy-four"); no digits in
    the narration. Use commas and full stops; avoid em-dashes, ellipses and brackets (they break the word count).
@@ -201,7 +241,8 @@ mention it in your summary.
      - <url 1>
      - <url 2>
    ```
-   Tags: 3-8. The sources are the ledger entry's sources.
+   Tags: 3-8. The sources are the ledger entry's sources. A `puzzle` adds `kind: puzzle`, has `sources: []`, and
+   ends its description with four blank lines and `Answer: <the solution and why>`.
 
 ## 6. Voice
 

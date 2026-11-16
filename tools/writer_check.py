@@ -42,23 +42,37 @@ def repeat_problems(vid, entries, banned):
     return [f"ledger entry {e.get('id')!r}: {r}" for r in ledger.check(e["claim"], topics, others, banned)]
 
 
-LABELS = {"legend": ("legend", "myth"), "what-if": ("what if",)}
+LABELS = {"legend": ("legend", "myth"), "what-if": ("what if",), "how-it-works": ("how",),
+          "puzzle": ("puzzle", "can you", "who did it", "solve")}
+PIVOT_KINDS = ("true", "how-it-works")    # the "You see," explanation beat; other kinds have their own beats
+
+
+def kind_of(vid, entries):
+    own = [e for e in entries if isinstance(e, dict) and e.get("video") == vid and e.get("status") == "coded"]
+    kind = own[0].get("kind", "true") if len(own) == 1 else "true"
+    return "true" if kind is True else kind
 
 
 def label_problems(folder, entries):
-    """a legend or what-if story must say so in its title, so nothing invented is ever presented as true"""
-    own = [e for e in entries if isinstance(e, dict) and e.get("video") == folder.name and e.get("status") == "coded"]
-    kind = own[0].get("kind", "true") if len(own) == 1 else "true"
+    """legend, what-if, how-it-works and puzzle videos must say so in the title, so nothing invented is ever presented
+    as true; a puzzle also needs `kind: puzzle` in meta.yml and its answer in the description after Answer:"""
+    kind = kind_of(folder.name, entries)
     if kind not in LABELS:
         return []
     try:
-        title = str((yaml.safe_load((folder / "meta.yml").read_text(encoding="utf-8")) or {}).get("title", ""))
+        meta = yaml.safe_load((folder / "meta.yml").read_text(encoding="utf-8")) or {}
     except (OSError, ValueError, yaml.YAMLError):
         return []   # a missing or malformed meta.yml is already reported by video_check
+    title, out = str(meta.get("title", "")), []
     if not any(w in title.lower() for w in LABELS[kind]):
-        return [f"meta.yml title must say it is a {kind} (contain " + " or ".join(repr(w.title()) for w in LABELS[kind])
-                + f"), because the ledger entry has kind: {kind}"]
-    return []
+        out.append(f"meta.yml title must say it is a {kind} (contain " + " or ".join(repr(w.title()) for w in LABELS[kind])
+                   + f"), because the ledger entry has kind: {kind}")
+    if kind == "puzzle":
+        if meta.get("kind") != "puzzle":
+            out.append("meta.yml needs `kind: puzzle` for a puzzle video")
+        if "Answer:" not in str(meta.get("description", "")):
+            out.append('a puzzle description must end with the solution after "Answer:"')
+    return out
 
 
 def check(folder, root=None):
@@ -86,7 +100,11 @@ def check(folder, root=None):
     except (OSError, ValueError, TypeError, KeyError, IndexError):
         pass    # a missing or malformed words.json is already reported by video_check
     try:
-        if PIVOT not in script_md.narration(folder / "SCRIPT.md"):
+        kind = kind_of(vid, ledger.load(root)[0]) if vid != ledger.TEMPLATE else "true"
+    except ValueError:
+        kind = "true"
+    try:
+        if kind in PIVOT_KINDS and PIVOT not in script_md.narration(folder / "SCRIPT.md"):
             out.append(f'narration needs the "{PIVOT}" pivot before the everyday analogy')
     except (OSError, ValueError):
         pass    # a missing or malformed SCRIPT.md is already reported by video_check

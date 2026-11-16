@@ -143,7 +143,7 @@ def _check_meta(meta, tpl):
     if "template" in meta and not isinstance(meta["template"], bool):
         out.append("meta.yml: template must be true or false")
     src = meta.get("sources")
-    if tpl and src in (None, []):
+    if (tpl or meta.get("kind") == "puzzle") and src in (None, []):   # an invented puzzle has nothing to cite
         pass
     elif not isinstance(src, list):
         out.append("meta.yml: sources must be a list of at least 2 http(s) URLs")

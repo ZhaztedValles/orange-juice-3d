@@ -199,3 +199,17 @@ def test_a_what_if_must_say_so_in_its_title(folder):
     assert any("what-if" in p for p in writer_check.check(folder))
     _set(folder, "what-if", "What If Rome Never Fell?")
     assert not any("title must say" in p for p in writer_check.check(folder))
+
+
+def test_a_puzzle_needs_its_label_kind_and_answer_but_no_pivot(folder):
+    _set(folder, "puzzle", "Can You Solve the Lighthouse Murder?")
+    probs = writer_check.check(folder)
+    assert any("kind: puzzle" in p for p in probs) and any("Answer:" in p for p in probs)
+    meta = yaml.safe_load((folder / "meta.yml").read_text(encoding="utf-8"))
+    meta.update(kind="puzzle", sources=[], description="Who did it? Comment below.\n\n\n\nAnswer: the cook.")
+    (folder / "meta.yml").write_text(yaml.safe_dump(meta), encoding="utf-8")
+    sm = folder / "SCRIPT.md"
+    sm.write_text(sm.read_text(encoding="utf-8").replace("You see,", "So,"), encoding="utf-8")
+    probs = writer_check.check(folder)
+    assert not any("title must say" in p or "Answer:" in p or "kind: puzzle" in p or "pivot" in p or "sources" in p
+                   for p in probs), probs

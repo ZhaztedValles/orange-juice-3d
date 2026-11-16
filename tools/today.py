@@ -21,6 +21,8 @@ import video_check  # noqa: E402
 
 FIX_ATTEMPTS = 2          # a held video with this many failed attempts is dropped, not fixed again
 STALE_AFTER = timedelta(days=3)    # a held video not re-rendered for this long is dropped even with fewer attempts
+# owner 2026-11-16: "mostly special genres": every other video is a special kind, taking turns through this list
+SPECIAL_KINDS = ("what-if", "news", "legend", "puzzle", "how-it-works", "true-crime", "countdown")
 FULL_DAYS = 2           # make nothing new once this many days of videos are queued
 NUMBER_RE = re.compile(r"(\d{3})-")
 
@@ -64,14 +66,21 @@ def plan(paused, queue_ids, render_state: dict, posted: set, video_ids: list, en
                      "action": "drop" if attempts >= FIX_ATTEMPTS or _stale(st, now) else "fix"})
     ledger_ids = [e.get("id") for e in entries if isinstance(e, dict)]
     top = max(_numbers(list(video_ids) + ledger_ids), default=0)
+    n = top + 1
     return {"paused": bool(paused), "queue_count": len(queue_ids), "held": held,
-            "next_id": f"{top + 1:03d}", "posted_count": len(posted), "make": 0 if paused or len(queue_ids) >= FULL_DAYS * max(1, per_day) else 1}
+            "next_id": f"{n:03d}", "kind": kind_for(n), "posted_count": len(posted), "make": 0 if paused or len(queue_ids) >= FULL_DAYS * max(1, per_day) else 1}
+
+
+def kind_for(n):
+    """the kind of video number n: odd numbers are true stories, even numbers take turns through SPECIAL_KINDS"""
+    return "true" if n % 2 else SPECIAL_KINDS[(n // 2 + 1) % len(SPECIAL_KINDS)]   # 012 (the first) is a what-if
 
 
 def summary(p):
     lines = [f"paused: {'yes' if p['paused'] else 'no'}",
              f"queued: {p['queue_count']}   posted: {p['posted_count']}",
-             f"make tonight: {p['make']} (next id starts with {p['next_id']}-)"]
+             f"make tonight: {p['make']} (next id starts with {p['next_id']}-)",
+             f"kind tonight: {p['kind']}"]
     if p["held"]:
         lines.append("held:")
         for h in p["held"]:

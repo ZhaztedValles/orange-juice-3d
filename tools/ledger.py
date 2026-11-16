@@ -14,8 +14,10 @@ stories/ledger.yml is a YAML list of entries (every key required except kind and
   reason    non-empty when dropped
   video     the videos/ folder id when coded, else ""
   date      YYYY-MM-DD
-  kind      optional: true (the default) | legend | what-if. A legend or what-if video's title must say so
-            (tools/writer_check.py); the sources then back the legend's telling or the real history it starts from
+  kind      optional: true (the default) | legend | what-if | how-it-works | countdown | news | true-crime | puzzle.
+            legend, what-if, how-it-works and puzzle titles must say so (tools/writer_check.py). A puzzle is invented
+            and may have no sources (sources: []); every other kind needs 2. The strange/obscurity minimums apply to
+            true, how-it-works, countdown and true-crime only
   category  optional: one lower-case word or hyphenated phrase (history, science, survival, heist, mystery, nature,
             disaster, invention, sport, law, legend, what-if, ...), used to rotate topics
 The posted/held state is NOT here: it is read from state/, so the ledger never needs syncing.
@@ -48,7 +50,10 @@ TOPIC_RE = re.compile(r"[a-z0-9]+(?:[ -][a-z0-9]+)*", re.ASCII)
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
 KEYS = ("id", "claim", "topics", "sources", "scores", "status", "reason", "video", "date")
 OPTIONAL_KEYS = ("kind", "category")
-KINDS = ("true", "legend", "what-if")
+KINDS = ("true", "legend", "what-if", "how-it-works", "countdown", "news", "true-crime", "puzzle")
+UNSOURCED_KINDS = ("puzzle",)   # an invented puzzle has nothing to cite; every other kind needs 2 sources
+# the strange / obscurity minimums apply to these kinds only (news is current, a legend famous, a puzzle invented)
+SCORED_KINDS = ("true", "how-it-works", "countdown", "true-crime")
 CATEGORY_RE = re.compile(r"[a-z]{2,20}(?:-[a-z]{2,20}){0,2}", re.ASCII)
 
 SIMILAR = 0.6  # share of the shorter claim's content words found in the other
@@ -205,7 +210,10 @@ def _entry_problems(e):
                               and all(isinstance(x, str) and TOPIC_RE.fullmatch(x) for x in t)):
         errs.append(f"{label}: 'topics' must be 1-8 lower-case words")
     s = e.get("sources")
-    if "sources" in e:
+    kind = "true" if e.get("kind", "true") is True else e.get("kind", "true")
+    if "sources" in e and kind in UNSOURCED_KINDS and s == []:
+        pass
+    elif "sources" in e:
         if not (isinstance(s, list) and all(isinstance(u, str) for u in s)):
             errs.append(f"{label}: 'sources' must be a list of URLs")
         else:
@@ -237,6 +245,8 @@ def _entry_problems(e):
             errs.append(f"{label}: 'video' must be \"\" unless the status is coded")
     if status == "coded" and isinstance(sc, dict) and all(_int(sc.get(k)) for k in SCORE_KEYS):
         for k, lo in (("strange", MIN_STRANGE), ("obscurity", MIN_OBSCURITY), ("people", MIN_PEOPLE)):
+            if k != "people" and kind not in SCORED_KINDS:
+                continue
             if sc[k] < lo:
                 errs.append(f"{label}: a coded story needs {k} >= {lo} (has {sc[k]})")
     if "date" in e and not _iso(e["date"]):
