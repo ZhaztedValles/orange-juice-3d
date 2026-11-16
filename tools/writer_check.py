@@ -10,6 +10,7 @@ import json
 import re
 import sys
 from pathlib import Path
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
@@ -41,6 +42,25 @@ def repeat_problems(vid, entries, banned):
     return [f"ledger entry {e.get('id')!r}: {r}" for r in ledger.check(e["claim"], topics, others, banned)]
 
 
+LABELS = {"legend": ("legend", "myth"), "what-if": ("what if",)}
+
+
+def label_problems(folder, entries):
+    """a legend or what-if story must say so in its title, so nothing invented is ever presented as true"""
+    own = [e for e in entries if isinstance(e, dict) and e.get("video") == folder.name and e.get("status") == "coded"]
+    kind = own[0].get("kind", "true") if len(own) == 1 else "true"
+    if kind not in LABELS:
+        return []
+    try:
+        title = str((yaml.safe_load((folder / "meta.yml").read_text(encoding="utf-8")) or {}).get("title", ""))
+    except (OSError, ValueError, yaml.YAMLError):
+        return []   # a missing or malformed meta.yml is already reported by video_check
+    if not any(w in title.lower() for w in LABELS[kind]):
+        return [f"meta.yml title must say it is a {kind} (contain " + " or ".join(repr(w.title()) for w in LABELS[kind])
+                + f"), because the ledger entry has kind: {kind}"]
+    return []
+
+
 def check(folder, root=None):
     """every problem the writer must fix before pushing `folder` (empty list when it is ready).
     The story files are read from `root`: by default the repository that holds the folder (videos/<id> -> two levels
@@ -55,6 +75,7 @@ def check(folder, root=None):
             entries, banned = ledger.load(root)
             out += ledger.video_problems(vid, entries)
             out += repeat_problems(vid, entries, banned)
+            out += label_problems(folder, entries)
         except ValueError as e:
             out.append(f"stories: {e}")
     try:

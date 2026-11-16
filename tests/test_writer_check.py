@@ -175,3 +175,27 @@ def test_camera_cuts_must_be_planned(tmp_path):
     (d / "shots.json").write_text(json.dumps({"shots": [{"id": 1, "a": 0, "b": 400}], "planned": [[228, 228], [380, 390]]}),
                                   encoding="utf-8")
     assert writer_check.cut_problems(d) == []
+
+
+def _set(folder, kind, title):
+    led = folder.parent.parent / "stories" / "ledger.yml"
+    e = entry(VID)
+    e["kind"] = kind
+    led.write_text(yaml.safe_dump([e]), encoding="utf-8")
+    meta = yaml.safe_load((folder / "meta.yml").read_text(encoding="utf-8"))
+    meta["title"] = title
+    (folder / "meta.yml").write_text(yaml.safe_dump(meta), encoding="utf-8")
+
+
+def test_a_legend_must_say_so_in_its_title(folder):
+    _set(folder, "legend", "The Sailor Who Rode a Whale Home")
+    assert any("legend" in p for p in writer_check.check(folder))
+    _set(folder, "legend", "The Legend of the Sailor Who Rode a Whale Home")
+    assert not any("title must say" in p for p in writer_check.check(folder))
+
+
+def test_a_what_if_must_say_so_in_its_title(folder):
+    _set(folder, "what-if", "Rome Never Fell")
+    assert any("what-if" in p for p in writer_check.check(folder))
+    _set(folder, "what-if", "What If Rome Never Fell?")
+    assert not any("title must say" in p for p in writer_check.check(folder))

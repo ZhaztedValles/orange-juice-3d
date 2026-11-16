@@ -3,17 +3,21 @@
   python tools/ledger.py check "<claim>" --topics a,b,c   exit 0 prints `ok`; exit 1 prints why the claim can't be used
   python tools/ledger.py validate                          exit 0 (`ok`) or 1 with the problems in stories/*.yml
 
-stories/ledger.yml is a YAML list of entries (every key required):
+stories/ledger.yml is a YAML list of entries (every key required except kind and category):
   id        "<NNN>-<slug>" for a coded story, "idea-<slug>" for an idea that never got a video
   claim     one sentence, the strange true fact
   topics    1-8 lower-case words
   sources   >= 2 distinct http(s) URLs on different registrable domains (en. and de.wikipedia.org are one)
   scores    {strange, obscurity, people, visual, provable}, integers 1-5 (a coded story needs strange >= 4,
-            obscurity >= 4, people >= 3)
+            obscurity >= 3, people >= 3)
   status    idea | coded | dropped
   reason    non-empty when dropped
   video     the videos/ folder id when coded, else ""
   date      YYYY-MM-DD
+  kind      optional: true (the default) | legend | what-if. A legend or what-if video's title must say so
+            (tools/writer_check.py); the sources then back the legend's telling or the real history it starts from
+  category  optional: one lower-case word or hyphenated phrase (history, science, survival, heist, mystery, nature,
+            disaster, invention, sport, law, legend, what-if, ...), used to rotate topics
 The posted/held state is NOT here: it is read from state/, so the ledger never needs syncing.
 stories/banned.yml is a YAML list of {claim, keywords}: a claim is blocked when it contains ALL the keywords of an
 entry, or is worded very like the entry's claim.
@@ -34,7 +38,8 @@ ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE = "000-bridge"    # the engine template: never queued, posted or written to, and the only video with no ledger entry
 STATUSES = ("idea", "coded", "dropped")
 SCORE_KEYS = ("strange", "obscurity", "people", "visual", "provable")
-MIN_STRANGE = MIN_OBSCURITY = 4
+MIN_STRANGE = 4
+MIN_OBSCURITY = 3      # owner 2026-11-16: trending stories are allowed, so a story need not be obscure
 MIN_PEOPLE = 3
 SHARED_TOPICS = 3          # two stories sharing this many topics are the same story
 ID_RE = re.compile(r"(?:\d{3}|idea)-[a-z0-9]+(?:-[a-z0-9]+)*", re.ASCII)
@@ -42,6 +47,9 @@ VIDEO_RE = re.compile(r"\d{3}-[a-z0-9-]{3,50}", re.ASCII)
 TOPIC_RE = re.compile(r"[a-z0-9]+(?:[ -][a-z0-9]+)*", re.ASCII)
 DATE_RE = re.compile(r"\d{4}-\d{2}-\d{2}", re.ASCII)
 KEYS = ("id", "claim", "topics", "sources", "scores", "status", "reason", "video", "date")
+OPTIONAL_KEYS = ("kind", "category")
+KINDS = ("true", "legend", "what-if")
+CATEGORY_RE = re.compile(r"[a-z]{2,20}(?:-[a-z]{2,20}){0,2}", re.ASCII)
 
 SIMILAR = 0.6  # share of the shorter claim's content words found in the other
 MIN_SIMILAR_WORDS = 4  # shorter claim needs this many content words before the similarity rule applies
@@ -183,7 +191,11 @@ def _entry_problems(e):
         return ["ledger entry must be a mapping"]
     label = f"ledger {e['id']!r}" if isinstance(e.get("id"), str) and e["id"].strip() else "ledger entry"
     errs = [f"{label}: missing key '{k}'" for k in KEYS if k not in e]
-    errs += [f"{label}: unknown key {k!r}" for k in e if k not in KEYS]
+    errs += [f"{label}: unknown key {k!r}" for k in e if k not in KEYS + OPTIONAL_KEYS]
+    if "kind" in e and e["kind"] is not True and e["kind"] not in KINDS:   # a bare YAML `true` means "true"
+        errs.append(f"{label}: 'kind' must be one of {', '.join(KINDS)}")
+    if "category" in e and not (isinstance(e["category"], str) and CATEGORY_RE.fullmatch(e["category"])):
+        errs.append(f"{label}: 'category' must be one lower-case word or hyphenated phrase")
     if "id" in e and not (isinstance(e["id"], str) and ID_RE.fullmatch(e["id"])):
         errs.append(f"{label}: id must be '<NNN>-<slug>' or 'idea-<slug>'")
     if "claim" in e and not (isinstance(e["claim"], str) and e["claim"].strip()):

@@ -59,7 +59,7 @@ def test_repo_files_are_valid():
 # --- beyond the brief's cases ---
 
 def test_coded_story_needs_minimum_scores():
-    low = {**GOOD, "scores": {**GOOD["scores"], "obscurity": 3, "people": 2}}
+    low = {**GOOD, "scores": {**GOOD["scores"], "obscurity": 2, "people": 2}}
     p = " ".join(ledger.problems([low], BANNED))
     assert "obscurity" in p and "people" in p
     # a dropped idea may score low: that is why it was dropped
@@ -286,3 +286,15 @@ def test_subdomains_of_one_site_are_not_different_domains():
     assert any("different domains" in x for x in ledger.problems([bbc], BANNED))
     ok = {**GOOD, "sources": ["https://www.bbc.co.uk/a", "https://www.itv.co.uk/b"]}
     assert ledger.problems([ok], BANNED) == []
+
+
+def test_obscurity_three_is_enough_now():
+    ok = {**GOOD, "scores": {**GOOD["scores"], "obscurity": 3}}
+    assert ledger.problems([ok], BANNED) == []
+
+
+def test_kind_and_category_are_optional_but_checked():
+    assert ledger.problems([{**GOOD, "kind": "legend", "category": "sea-legend"}], BANNED) == []
+    assert ledger.problems([{**GOOD, "kind": True, "category": "survival"}], BANNED) == []
+    p = " ".join(ledger.problems([{**GOOD, "kind": "fiction", "category": "Not OK!"}], BANNED))
+    assert "'kind'" in p and "'category'" in p
