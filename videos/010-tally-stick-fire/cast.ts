@@ -56,6 +56,20 @@ const drawFlames = (p: Pen, k: number) => {
   for (let i = 0; i < 4; i++) tongue(80 + i * 80, 230 + 90 * (((k + i) * 7) % 3) / 2, 62, "#f07a2a");
   for (let i = 0; i < 4; i++) tongue(90 + i * 78, 110 + 50 * (((k + i) * 5) % 3) / 2, 34, "#ffd25a");
 };
+/** smooth flames (shot 10 close-up): phase step n of SMOOTH_N, tongues rise and sway continuously so no frame jumps */
+const SMOOTH_N = 24;
+const drawFlamesSmooth = (p: Pen, n: number) => {
+  const ph = (n / SMOOTH_N) * Math.PI * 2;
+  const tongue = (x: number, h: number, w: number, sway: number, col: string) => {
+    const g = p.g;
+    g.beginPath(); g.moveTo(x - w, 392);
+    g.bezierCurveTo(x - w * 1.1, 392 - h * 0.45, x - w * 0.2 + sway, 392 - h * 0.7, x + sway * 2, 392 - h);
+    g.bezierCurveTo(x + w * 0.5 + sway, 392 - h * 0.6, x + w * 1.1, 392 - h * 0.4, x + w, 392);
+    g.closePath(); g.fillStyle = col; g.fill(); g.lineWidth = 6; g.strokeStyle = "#5a1d12"; g.stroke();
+  };
+  for (let i = 0; i < 4; i++) tongue(80 + i * 80, 275 + 40 * Math.sin(ph + i * 1.7), 62, 4 * Math.sin(2 * ph + i * 2.3), "#f07a2a");
+  for (let i = 0; i < 4; i++) tongue(90 + i * 78, 135 + 22 * Math.sin(ph + 1 + i * 2.1), 34, 3 * Math.sin(2 * ph + 0.7 + i * 1.9), "#ffd25a");
+};
 /** a puff of smoke (400 x 400), shade 0 light grey .. 1 dark */
 const drawSmoke = (p: Pen, seed: number, shade: number) => {
   const c = ["#d9d2cc", "#a9a1a2", "#6f6870"][Math.min(2, Math.round(shade * 2))];
@@ -63,14 +77,18 @@ const drawSmoke = (p: Pen, seed: number, shade: number) => {
   for (let i = 0; i < 6; i++) p.ell(110 + 180 * r(i), 120 + 160 * r(i + 9), 70 + 40 * r(i + 3), 60 + 30 * r(i + 5), c, 0);
   p.ell(200, 210, 130, 110, c, 0);
 };
-/** the furnace mouth (300 x 300): the dark arch, glowing coals; L 0..1 = flames inside the arch, k = flicker */
+/** the furnace mouth (300 x 300): the dark arch, glowing coals; L 0..1 = flames inside the arch, k = flicker
+ *  (k >= 100: smooth phase k - 100 of SMOOTH_N for the shot 10 close-up) */
 const drawMouth = (p: Pen, L: number, k: number) => {
   p.poly([[40, 300], [40, 150], [70, 95], [150, 70], [230, 95], [260, 150], [260, 300]], "#1c1416", 8);
   for (let i = 0; i < 7; i++) p.ell(70 + i * 27, 282 - (i % 2) * 8, 22, 14, i % 3 ? "#e0542a" : "#ffb347", 4);
   if (L > 0.02) {
     const g = p.g;
     for (let i = 0; i < 5; i++) {
-      const x = 80 + i * 35, h = (60 + 150 * L) * (0.7 + 0.3 * (((k + i) * 7) % 3) / 2), w = 22 + 6 * L, sw = ((k * 13 + i * 5) % 9) - 4;
+      const ph = ((k - 100) / SMOOTH_N) * Math.PI * 2, sm = k >= 100;
+      const x = 80 + i * 35, w = 22 + 6 * L;
+      const h = (60 + 150 * L) * (sm ? 0.85 + 0.15 * Math.sin(ph + i * 1.9) : 0.7 + 0.3 * (((k + i) * 7) % 3) / 2);
+      const sw = sm ? 3 * Math.sin(2 * ph + i * 2.2) : ((k * 13 + i * 5) % 9) - 4;
       g.beginPath(); g.moveTo(x - w, 278); g.bezierCurveTo(x - w, 278 - h * 0.5, x + sw, 278 - h * 0.7, x + sw, 278 - h);
       g.bezierCurveTo(x + w * 0.6, 278 - h * 0.6, x + w, 278 - h * 0.4, x + w, 278); g.closePath();
       g.fillStyle = i % 2 ? "#ffd25a" : "#f07a2a"; g.fill(); g.lineWidth = 5; g.strokeStyle = "#5a1d12"; g.stroke();
@@ -145,6 +163,8 @@ const walker = (cam: CamInfo, t: number, out: Stage, i: number, o: Outfit, okey:
   blob(out, p[0], p[1], p[2], 1);
 };
 const flick = (t: number) => Math.floor(t * 8) % 6;
+/** smooth flicker phase: one step per frame, a full cycle every SMOOTH_N frames */
+const smoothK = (t: number, off = 0) => (Math.round(t * 30) + off) % SMOOTH_N;
 const flames = (out: Stage, p: V3, t: number, w: number, h: number, seed = 0) => {
   const k = (flick(t) + seed) % 6;
   out.fx.push({ key: `flames${k}`, cw: 400, ch: 400, draw: (pn) => drawFlames(pn, k), x: p[0], y: p[1] + h / 2, z: p[2], w, h });
@@ -252,11 +272,12 @@ const cellarSet = (id: number, t: number, cam: CamInfo, out: Stage) => {
   FURN_X.forEach((fx, i) => {
     let L = id === 5 ? 0.15 + 0.55 * smooth((t - T_BURNED2 + 0.07) / 0.6) : 0.7;
     if (id === 10) L = i === 0 ? (t < T_WOOD - 0.07 ? 0 : smooth((t - T_WOOD + 0.07) / 0.5)) : 0.3;
-    const lq = q(L, 10), k = flick(t + i * 0.3);
+    const lq = q(L, 10), k = id === 10 ? 100 + smoothK(t, i * 7) : flick(t + i * 0.3);
     out.fx.push({ key: `mouth${lq}_${k}`, cw: 300, ch: 300, draw: (p) => drawMouth(p, lq, k), x: cx + fx, y: cy + 0.68, z: cz - 3.5, w: 1.3, h: 1.3 });
     if (id === 10 && i === 0 && t >= T_WOOD - 0.07) { // dry wood: the flames burst out of the mouth and climb the flue
       const u = smooth((t - T_WOOD + 0.07) / 0.9) * (1 + 0.25 * smooth((t - T_TALL + 0.07) / 0.5));
-      flames(out, [cx + fx, cy + 1.0, cz - 3.45], t, 1.4 * smooth(u / 0.2), 0.05 + 2.95 * u, 2);
+      const n = smoothK(t, 5), w = 1.4 * smooth(u / 0.2), h = 0.05 + 2.95 * u;
+      out.fx.push({ key: `sflames${n}`, cw: 400, ch: 400, draw: (pn) => drawFlamesSmooth(pn, n), x: cx + fx, y: cy + 1.0 + h / 2, z: cz - 3.45, w, h });
     }
   });
   if (id === 5) {
