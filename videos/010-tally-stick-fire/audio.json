@@ -1,0 +1,199 @@
+{
+ "music": [
+  {
+   "from": 0,
+   "to": 5.6,
+   "mood": "hook"
+  },
+  {
+   "from": 5.6,
+   "to": 18.9,
+   "mood": "playful"
+  },
+  {
+   "from": 18.9,
+   "to": 28.0,
+   "mood": "march"
+  },
+  {
+   "from": 28.0,
+   "to": 38.9,
+   "mood": "tension"
+  },
+  {
+   "from": 38.9,
+   "to": 48.9,
+   "mood": "playful"
+  },
+  {
+   "from": 48.9,
+   "to": 60.7,
+   "mood": "tension"
+  },
+  {
+   "from": 60.7,
+   "to": 68.1667,
+   "mood": "playful"
+  }
+ ],
+ "key": "F",
+ "bpm": 112,
+ "sfx": [
+  {
+   "t": 0.0,
+   "kind": "breeze",
+   "dur": 5.5,
+   "gain_db": -12
+  },
+  {
+   "t": 0.0,
+   "kind": "water_bed",
+   "dur": 5.5,
+   "gain_db": -16
+  },
+  {
+   "t": 0.3,
+   "kind": "timber_tear",
+   "dur": 2.0,
+   "gain_db": -12,
+   "pan": -0.2
+  },
+  {
+   "t": 2.17,
+   "kind": "wood_crack",
+   "gain_db": -4
+  },
+  {
+   "t": 10.05,
+   "kind": "wood_crack",
+   "gain_db": -6,
+   "pan": 0.1
+  },
+  {
+   "t": 13.9,
+   "kind": "push_thump",
+   "gain_db": -8
+  },
+  {
+   "t": 16.85,
+   "kind": "rattle",
+   "dur": 1.2,
+   "gain_db": -10,
+   "pan": -0.2
+  },
+  {
+   "t": 23.1,
+   "kind": "whoosh",
+   "dur": 0.5,
+   "gain_db": -14,
+   "pan": -0.3
+  },
+  {
+   "t": 24.4,
+   "kind": "whoosh",
+   "dur": 0.5,
+   "gain_db": -14,
+   "pan": 0.2
+  },
+  {
+   "t": 26.25,
+   "kind": "whoosh",
+   "dur": 0.6,
+   "gain_db": -10
+  },
+  {
+   "t": 30.08,
+   "kind": "oof",
+   "gain_db": -6
+  },
+  {
+   "t": 31.5,
+   "kind": "stroll_step",
+   "gain_db": -12,
+   "pan": -0.2
+  },
+  {
+   "t": 32.0,
+   "kind": "stroll_step",
+   "gain_db": -12,
+   "pan": -0.2
+  },
+  {
+   "t": 32.92,
+   "kind": "push_thump",
+   "gain_db": -6
+  },
+  {
+   "t": 34.26,
+   "kind": "clink",
+   "dur": 0.8,
+   "gain_db": -8,
+   "pan": -0.3
+  },
+  {
+   "t": 37.02,
+   "kind": "whoa",
+   "dur": 1.0,
+   "gain_db": -6,
+   "pan": 0.2
+  },
+  {
+   "t": 42.7,
+   "kind": "whoosh",
+   "dur": 1.2,
+   "gain_db": -8
+  },
+  {
+   "t": 46.94,
+   "kind": "whoosh",
+   "dur": 0.9,
+   "gain_db": -6
+  },
+  {
+   "t": 49.6,
+   "kind": "whoosh",
+   "dur": 1.4,
+   "gain_db": -10
+  },
+  {
+   "t": 51.74,
+   "kind": "timber_tear",
+   "dur": 2.0,
+   "gain_db": -8
+  },
+  {
+   "t": 54.1,
+   "kind": "whoosh",
+   "dur": 1.5,
+   "gain_db": -2
+  },
+  {
+   "t": 54.1,
+   "kind": "wood_crack",
+   "gain_db": 0
+  },
+  {
+   "t": 55.4,
+   "kind": "whoa",
+   "dur": 1.2,
+   "gain_db": -8
+  },
+  {
+   "t": 57.4,
+   "kind": "bird_chirps",
+   "dur": 4.0,
+   "gain_db": -16
+  },
+  {
+   "t": 63.24,
+   "kind": "creak",
+   "dur": 0.8,
+   "gain_db": -10
+  },
+  {
+   "t": 64.4,
+   "kind": "oof",
+   "gain_db": -8
+  }
+ ]
+}

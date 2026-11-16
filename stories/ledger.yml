@@ -111,3 +111,16 @@
   reason: ""
   video: 009-balloon-valve-teeth
   date: "2026-11-16"
+- id: 010-tally-stick-fire
+  claim: "On the sixteenth of October 1834 two labourers spent the day burning cartloads of old wooden tally sticks in the furnaces under the House of Lords, and that evening the old Palace of Westminster burned down."
+  topics: [tally-sticks, palace-of-westminster, fire, exchequer]
+  sources:
+    - https://historyofparliament.com/2013/10/16/the-fire-of-1834/
+    - https://en.wikipedia.org/wiki/Burning_of_Parliament
+  scores: {strange: 5, obscurity: 3, people: 4, visual: 5, provable: 5}
+  status: coded
+  reason: ""
+  video: 010-tally-stick-fire
+  date: "2026-11-17"
+  kind: "true"
+  category: disaster
