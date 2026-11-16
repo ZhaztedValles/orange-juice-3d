@@ -124,3 +124,16 @@
   date: "2026-11-17"
   kind: "true"
   category: disaster
+- id: 011-diamond-field-hoax
+  claim: "In 1872 the cousins Philip Arnold and John Slack salted a remote mesa near the Colorado-Wyoming line with cheap rough diamonds and rubies, fooled Tiffany, a mining engineer and San Francisco's leading bankers out of more than half a million dollars, until the geologist Clarence King exposed the fraud."
+  topics: [diamond-hoax, salted-mine, clarence-king, swindle]
+  sources:
+    - https://www.smithsonianmag.com/history/the-great-diamond-hoax-of-1872-2630188/
+    - https://www.wyohistory.org/encyclopedia/diamond-hoax-bonanza-never-was
+  scores: {strange: 5, obscurity: 3, people: 5, visual: 4, provable: 5}
+  status: coded
+  reason: ""
+  video: 011-diamond-field-hoax
+  date: "2026-11-17"
+  kind: "true"
+  category: con
