@@ -21,6 +21,7 @@ import video_check  # noqa: E402
 
 FIX_ATTEMPTS = 2          # a held video with this many failed attempts is dropped, not fixed again
 STALE_AFTER = timedelta(days=3)    # a held video not re-rendered for this long is dropped even with fewer attempts
+FULL_DAYS = 2           # make nothing new once this many days of videos are queued
 NUMBER_RE = re.compile(r"(\d{3})-")
 
 
@@ -39,14 +40,17 @@ def _stale(st, now):
     return now - when > STALE_AFTER
 
 
-def plan(paused, queue_ids, render_state: dict, posted: set, video_ids: list, entries, templates=(), now=None) -> dict:
+def plan(paused, queue_ids, render_state: dict, posted: set, video_ids: list, entries, templates=(), now=None,
+         per_day=1) -> dict:
     """tonight's plan. Pure: no I/O.
     render_state = {id: state}; templates = ids of template folders (meta.yml `template: true`; `000-bridge` always
     is one): they are never listed as held and never counted as queued. A held id with no folder in video_ids is not
     listed (it was dropped already). next_id is one above the highest number among the video folders and the ledger's
     '<NNN>-<slug>' ids (so a dropped story's number is not reused), at least 001. A held video is fixed while it has
     fewer than FIX_ATTEMPTS attempts and its state's `updated` is at most STALE_AFTER old (`now`, default the current
-    time); otherwise it is dropped (a fix left uncommitted never re-renders, so its attempts would never grow)."""
+    time); otherwise it is dropped (a fix left uncommitted never re-renders, so its attempts would never grow).
+    make is 1, or 0 when paused or when FULL_DAYS days of videos (FULL_DAYS x per_day) are already queued: the writer
+    runs more often than videos post, so the queue builds a buffer and then the extra runs only fix held videos."""
     now = now or datetime.now(timezone.utc)
     skip = set(templates) | {ledger.TEMPLATE}
     queue_ids = [v for v in queue_ids if v not in skip]
@@ -61,7 +65,7 @@ def plan(paused, queue_ids, render_state: dict, posted: set, video_ids: list, en
     ledger_ids = [e.get("id") for e in entries if isinstance(e, dict)]
     top = max(_numbers(list(video_ids) + ledger_ids), default=0)
     return {"paused": bool(paused), "queue_count": len(queue_ids), "held": held,
-            "next_id": f"{top + 1:03d}", "posted_count": len(posted), "make": 0 if paused else 1}
+            "next_id": f"{top + 1:03d}", "posted_count": len(posted), "make": 0 if paused or len(queue_ids) >= FULL_DAYS * max(1, per_day) else 1}
 
 
 def summary(p):
@@ -117,7 +121,7 @@ def main(argv):
     video_ids = sorted(d.name for d in videos.iterdir() if d.is_dir()) if videos.is_dir() else []
     templates = [v for v in video_ids if video_check.is_template(videos / v)]
     p = plan(bool(cfg.get("paused")), status.queued_ids(queue_names(get_store())), render_state.load(ROOT / "state"),
-             set(common.load_posted()), video_ids, entries, templates)
+             set(common.load_posted()), video_ids, entries, templates, per_day=len(cfg.get("slots") or [1]))
     print(json.dumps(p, indent=1) if a.json else summary(p))
     return 0
 

@@ -23,6 +23,13 @@ def test_not_paused_makes_one():
     assert p["paused"] is False and p["make"] == 1
 
 
+def test_a_full_queue_makes_nothing_new():
+    full = [f"{i:03d}-v" for i in range(1, 13)]
+    assert today.plan(False, full, {}, set(), ["000-bridge"], [], per_day=6)["make"] == 0
+    assert today.plan(False, full[:11], {}, set(), ["000-bridge"], [], per_day=6)["make"] == 1
+    assert today.plan(False, full[:2], {}, set(), ["000-bridge"], [])["make"] == 0      # default 1 a day
+
+
 def test_held_attempts_decide_fix_or_drop():
     p = plan(render={
         "001-a-story": {"status": "held", "reasons": ["too long"], "attempts": 1},

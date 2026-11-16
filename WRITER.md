@@ -100,7 +100,8 @@ mention it in your summary.
      (`reason: "held after 2 render attempts: <reasons>"`) and clear `video` (`video: ""`). Change no other field;
    - `python tools/ledger.py validate` must print `ok`; commit:
      `git add stories/ledger.yml && git commit -m "Drop <id>: <short reason>"`.
-4. Then make `make` new videos (it is 1 unless paused). The new folder is `videos/<id>/` with `<id>` = the number
+4. Then make `make` new videos (it is 1, or 0 when paused or when 2 days of videos are already queued; with 0, stop
+   after the held videos and push only if you committed a fix). The new folder is `videos/<id>/` with `<id>` = the number
    today.py prints, a hyphen, and a slug of 3-50 characters from `a-z 0-9 -` (for example `001-short-slug`).
 
 ## 4. Pick the story

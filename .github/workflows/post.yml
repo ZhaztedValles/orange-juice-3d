@@ -1,6 +1,6 @@
 # Post the next queued Short to YouTube (python autopilot/publish.py youtube).
 #
-# The MAIN trigger is cron-job.org, which dispatches this workflow at each slot (19:00 Asia/Manila) with dry_run=false.
+# The MAIN trigger is cron-job.org, which dispatches this workflow at each slot (config.yml `slots`, Asia/Manila) with dry_run=false.
 # The `schedule` below is only the backup, a few minutes later: publish.py posts at most once per slot (state/posted),
 # so the two triggers can never double-post. Nobody starts this by hand: a manual run defaults to a dry run.
 # Times are UTC. When config.yml `slots` change, list a cron inside each slot's window here (tests/test_publish.py
@@ -20,6 +20,7 @@ name: post
 on:
   schedule:
     - cron: "5 11 * * *"        # backup: 19:05 Manila (cron-job.org fires at 19:00)
+    - cron: "5 23,2,5,8,14 * * *"   # backup: 07:05, 10:05, 13:05, 16:05, 22:05 Manila
   workflow_dispatch:
     inputs:
       dry_run:
