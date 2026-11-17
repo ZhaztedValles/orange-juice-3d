@@ -17,6 +17,7 @@ LEAD = 0.25  # seconds of silence before the first word
 TAIL = 0.6  # seconds of silence after the last word
 SR = 24000
 MIN_SECONDS, MAX_SECONDS = 50.0, 68.0
+LONG_MIN_SECONDS, LONG_MAX_SECONDS = 75.0, 112.0  # a long-video chapter (long/<NNN-slug>/ch<N>): 80-110 s of video
 
 
 def timings(chunks, lead):
@@ -67,12 +68,13 @@ def timings(chunks, lead):
     return out
 
 
-def check_duration(seconds):
+def check_duration(seconds, long=False):
     """Error message if the voice length is outside the allowed range, else None."""
-    if MIN_SECONDS <= seconds <= MAX_SECONDS:
+    lo, hi = (LONG_MIN_SECONDS, LONG_MAX_SECONDS) if long else (MIN_SECONDS, MAX_SECONDS)
+    if lo <= seconds <= hi:
         return None
-    return (f"voice is {seconds:.1f} s, allowed range is {MIN_SECONDS:.0f}-{MAX_SECONDS:.0f} s "
-            f"(the video is 55-70 s); edit the narration")
+    what = "a long chapter is 80-110 s" if long else "the video is 55-70 s"
+    return f"voice is {seconds:.1f} s, allowed range is {lo:.0f}-{hi:.0f} s ({what}); edit the narration"
 
 
 def check_count(words, narration_text):
@@ -90,6 +92,7 @@ def main(folder, keep=False):
     from kokoro import KPipeline
 
     folder = Path(folder)
+    long = folder.parent.parent.name == "long"
     text = narration(folder / "SCRIPT.md")
     pipeline = KPipeline(lang_code="a")
 
@@ -112,7 +115,7 @@ def main(folder, keep=False):
     duration = len(wav) / SR
     print(f"{len(words)} words, {duration:.2f} s, {len(words) / duration:.2f} words/s")
 
-    errors = [e for e in (check_duration(duration), check_count(words, text)) if e]
+    errors = [e for e in (check_duration(duration, long), check_count(words, text)) if e]
     if not errors or keep:
         sf.write(str(folder / "voice.wav"), wav, SR, subtype="PCM_16")
         (folder / "words.json").write_text(json.dumps(words, indent=1) + "\n", encoding="utf-8")
@@ -123,5 +126,5 @@ def main(folder, keep=False):
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if a != "--keep"]
     if len(args) != 1:
-        sys.exit("usage: python tools/voice.py videos/<NNN-slug> [--keep]")
+        sys.exit("usage: python tools/voice.py videos/<NNN-slug> | long/<NNN-slug>/ch<N> [--keep]")
     main(args[0], keep="--keep" in sys.argv[1:])
