@@ -31,6 +31,8 @@ import V013, { FRAMES as F013 } from "../videos/013-weston-walk-lincoln/Video";
 import W013 from "../videos/013-weston-walk-lincoln/words.json";
 import V014, { FRAMES as F014 } from "../videos/014-shipwreck-lock-code/Video";
 import W014 from "../videos/014-shipwreck-lock-code/words.json";
+import V015, { FRAMES as F015 } from "../videos/015-airship-polo-secret/Video";
+import W015 from "../videos/015-airship-polo-secret/words.json";
 
 export type VideoEntry = { id: string; Component: React.FC; frames: number; words: Word[] | null };
 
@@ -50,6 +52,7 @@ export const VIDEOS: VideoEntry[] = [
   { id: "012-suez-lighthouse-liberty", Component: V012, frames: F012, words: W012 as Word[] },
   { id: "013-weston-walk-lincoln", Component: V013, frames: F013, words: W013 as Word[] },
   { id: "014-shipwreck-lock-code", Component: V014, frames: F014, words: W014 as Word[] },
+  { id: "015-airship-polo-secret", Component: V015, frames: F015, words: W015 as Word[] },
 ];
 
 import L0, { FRAMES as LF0 } from "../long/000-sample/ch1/Video";

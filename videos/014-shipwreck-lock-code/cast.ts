@@ -139,12 +139,14 @@ const card = (out: Stage, key: string, cw: number, ch: number, draw: (p: Pen) =>
   if (w > 0.004) out.fx.push({ key, cw, ch, draw, x, y, z, w, h, soft, rot });
 };
 const wave = (t: number, k = 0, sp = 6) => q(0.55 + 0.35 * Math.sin(t * sp + k), 6);
+/** the time of the kick frame for a word at T (story.ts KICKS: floor((T - 2 / 30) * 30)) */
+const kickT = (T: number) => Math.floor((T - 2 / 30) * 30 + 1e-6) / 30;
 /** a burst of light from t0 (0.5 s), soft; it starts on t0 exactly (a kick frame or a word) */
 const burst = (out: Stage, t: number, t0: number, x: number, y: number, z: number, s: number) => {
   const u = (t - t0 + 1e-6) / 0.5;
   if (u < 0 || u >= 1) return;
-  const uq = q(u, 15);
-  card(out, `burst${uq}`, 500, 500, (pn) => fxBurst(pn, uq), x, y, z, s, s, true);
+  const uq = q(u, 15), k = 1 - smooth((u - 0.55) / 0.45); // shrinks away at the end (never vanishes at full size)
+  card(out, `burst${uq}`, 500, 500, (pn) => fxBurst(pn, uq), x, y, z, s * k, s * k, true);
 };
 
 // ---------------- the places ----------------
@@ -174,7 +176,7 @@ const museumSet = (id: number, t: number, cam: CamInfo, out: Stage) => {
   lockCard(out, "ANCE", true, cx, D0 + 1.2, cz, 0.9);
   if (id === 12) {
     const glad = t >= T_PERFECT - 0.07;
-    front(cam, t, out, 60, KIDA, "kidA", cx - 0.85, fy, cz + 0.7, glad ? "grin" : "shock", glad ? { wave: wave(t, 1, 6) } : {});
+    front(cam, t, out, 60, KIDA, "kidA", cx - 0.85, fy, cz + 0.7, glad ? "grin" : "shock", { wave: wave(t, 1, 6) }); // waving the whole shot: an arm raised mid-shot jumps
     front(cam, t, out, 61, KIDB, "kidB", cx + 0.75, fy, cz + 0.75, glad ? "laugh" : "smile");
     front(cam, t, out, 62, townsfolk(1), "tf1", cx - 1.5, fy, cz - 0.15, "smile");
     front(cam, t, out, 63, townsfolk(4), "tf4", cx + 1.35, fy, cz - 0.05, glad ? "grin" : "smile");
@@ -182,10 +184,10 @@ const museumSet = (id: number, t: number, cam: CamInfo, out: Stage) => {
     return;
   }
   // id 13: the finder beside the case: like opening the Ark
-  const ark = t >= T_ARK - 0.07;
-  front(cam, t, out, 1, FINDER, "finder", cx - 0.5, fy, cz + 0.95, ark ? "laugh" : t >= T_FOUND - 0.07 ? "grin" : "smile", ark ? { wave: wave(t, 0, 5) } : {});
+  const ark = t >= kickT(T_ARK) - 1e-6; // on the kick frame (planned); the hand is up the whole shot (an arm raised mid-shot jumps)
+  front(cam, t, out, 1, FINDER, "finder", cx - 0.5, fy, cz + 0.95, ark ? "laugh" : t >= T_FOUND - 0.07 ? "grin" : "smile", { wave: ark ? wave(t, 0, 5) : 0.55 });
   front(cam, t, out, 20, CURATOR, "cur", cx + 0.65, fy, cz - 0.55, ark ? "grin" : "smile");
-  burst(out, t, T_ARK, cx, D0 + 1.3, cz + 0.05, 1.1);
+  burst(out, t, kickT(T_ARK), cx, D0 + 1.3, cz + 0.05, 1.1); // starts on the kick frame (planned)
 };
 
 const stormSet = (id: number, t: number, cam: CamInfo, out: Stage) => {
@@ -206,7 +208,7 @@ const beachSet = (id: number, t: number, cam: CamInfo, out: Stage) => {
     card(out, "detector", 160, 400, drawDetector, x + 0.45, D0 + 0.5, z + 0.2, 0.32, 0.8, false, -0.35 + 0.18 * Math.sin(t * 2.2));
     const u = grow(t, T_TREASURE, 0.3);
     if (u > 0) card(out, "coinG", 128, 128, (p) => drawCoin(p, true), x + 0.8, D0 + 0.2 + 0.25 * u, z + 0.3, 0.16 * u, 0.16 * u);
-    burst(out, t, T_TREASURE, x + 0.8, D0 + 0.35, z + 0.28, 0.7);
+    burst(out, t, kickT(T_TREASURE), x + 0.8, D0 + 0.35, z + 0.28, 0.7); // starts on the kick frame (planned)
     void T_STRIPPED;
     return;
   }
@@ -220,7 +222,7 @@ const beachSet = (id: number, t: number, cam: CamInfo, out: Stage) => {
     lockCard(out, "BRLT", false, id === 5 ? 0.4 : 0.32, D0 + (id === 5 ? 1.36 : 1.24), -0.62, has);
     if (id === 5) {
       const rs = q(smooth((t - T_RINGS + 0.07) / 0.3), 6);
-      if (rs > 0) card(out, `ring${rs}`, 256, 256, (p) => drawRing(p, rs), 0.4, D0 + 1.34, -0.6, 0.42 * (0.7 + 0.3 * rs), 0.32 * (0.7 + 0.3 * rs), true);
+      if (rs > 0) card(out, `ring${rs}`, 256, 256, (p) => drawRing(p, rs), 0.4, D0 + 1.34, -0.6, 0.42 * rs, 0.32 * rs, true); // grows from nothing
     } else {
       const u = grow(t, T_THOUSAND, 0.3), v = grow(t, T_ONE, 0.25);
       card(out, "tag1296", 300, 150, (p) => drawTag(p, "1,296"), 0.36, D0 + 1.5, -0.5, 0.24 * u, 0.12 * u);
@@ -249,14 +251,15 @@ const labSet = (id: number, t: number, cam: CamInfo, out: Stage) => {
   const fy = D0 + 0.08, [sx, , sz] = SCAN, [dx, , dz] = DESK;
   if (id === 8) {
     const into = t >= T_SCANNER - 0.07;
-    front(cam, t, out, 22, ENGINEER, "eng", sx - 0.95, fy, sz + 1.25, t >= T_LAB - 0.07 ? (into ? "grin" : "smile") : "neutral", t >= T_PUT - 0.07 && !into ? { wave: 0.5 } : {});
-    front(cam, t, out, 20, CURATOR, "cur", sx - 2.1, fy, sz + 1.55, "smile", t < T_PUT - 0.07 ? { wave: 0.45 } : {});
+    // arms stay as they are the whole shot (an arm raised or dropped mid-shot jumps)
+    front(cam, t, out, 22, ENGINEER, "eng", sx - 0.95, fy, sz + 1.25, t >= T_LAB - 0.07 ? (into ? "grin" : "smile") : "neutral");
+    front(cam, t, out, 20, CURATOR, "cur", sx - 2.1, fy, sz + 1.55, "smile", { wave: 0.45 });
     // the lock: in the curator's hand, then carried to the cabinet window, then in
     const m = smooth((t - T_PUT + 0.07) / 0.6), k = 1 - smooth((t - T_SCANNER - 0.25) / 0.3);
     const x = sx - 1.75 + (1.75 - 0.0) * m, y = D0 + 1.12 + 0.18 * m, z = sz + 1.75 - 1.0 * m;
     lockCard(out, "BRLT", false, x, y, z, 0.8 * k);
     const rs = q(smooth((t - T_SCANNER - 0.5) / 0.4), 6);
-    if (rs > 0) card(out, `ring${rs}`, 256, 256, (p) => drawRing(p, rs), sx, D0 + 1.27, sz + 0.74, 0.6, 0.48, true);
+    if (rs > 0) card(out, `ring${rs}`, 256, 256, (p) => drawRing(p, rs), sx, D0 + 1.27, sz + 0.74, 0.6 * rs, 0.48 * rs, true); // grows from nothing
     return;
   }
   // the screen: on the monitor face
