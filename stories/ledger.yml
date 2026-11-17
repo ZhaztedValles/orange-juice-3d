@@ -137,3 +137,17 @@
   date: "2026-11-17"
   kind: "true"
   category: con
+- id: 012-suez-lighthouse-liberty
+  claim: "In the late 1860s Auguste Bartholdi proposed a colossal robed Egyptian woman holding a torch as a lighthouse at Port Said for the Suez Canal, Khedive Ismail turned it down as too costly, and Bartholdi reworked the idea into the Statue of Liberty."
+  topics: [bartholdi, suez-canal, port-said, statue-of-liberty]
+  sources:
+    - https://en.wikipedia.org/wiki/Egypt_Carrying_the_Light_to_Asia
+    - https://www.nps.gov/stli/learn/historyculture/fr%C3%A9d%C3%A9ric-auguste-bartholdi.htm
+    - https://archive.aramcoworld.com/issue/198605/the.new.colossus.htm
+  scores: {strange: 4, obscurity: 3, people: 4, visual: 5, provable: 4}
+  status: coded
+  reason: ""
+  video: 012-suez-lighthouse-liberty
+  date: "2026-11-17"
+  kind: "what-if"
+  category: monument
