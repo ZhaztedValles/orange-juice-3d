@@ -4,10 +4,10 @@ import { loadFont } from "@remotion/fonts";
 import { fitText } from "@remotion/layout-utils";
 import { cleanWord, wordAt, type Word } from "./captions";
 
-const FAMILY = "Poppins";
+export const FAMILY = "Poppins";
 // Poppins hhea metrics (units per em): ascender 1050, descender 350. With line-height 1em the baseline sits at
 // (1 - (1.05 + 0.35)) / 2 + 1.05 = 0.85 em below the top of the line box.
-const BASELINE_IN_LINE = 0.85;
+export const BASELINE_IN_LINE = 0.85;
 
 // All sizes are given at 1920 px height and scaled by height / 1920.
 const FONT_PX = 92;
@@ -17,7 +17,7 @@ const MAX_WIDTH = 0.9; // fraction of the width
 
 let fontPromise: Promise<void> | null = null;
 /** load Poppins Bold once (browser only: called from an effect, never at module scope) */
-const ensureFont = (): Promise<void> =>
+export const ensureFont = (): Promise<void> =>
   (fontPromise ??= loadFont({ family: FAMILY, url: staticFile("fonts/Poppins-Bold.ttf"), weight: "700" }));
 
 /** One word at a time, white Poppins Bold with a thin black outline, lower middle; hard swap, no animation. */
