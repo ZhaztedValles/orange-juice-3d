@@ -82,6 +82,25 @@ These tokens are forbidden anywhere in that code, comments and string literals i
 - Engine modules never import from a video folder. When an engine module needs a value that differs per video, it
   takes it as a parameter (default: the bridge template's value).
 
+## Long chapters (milestone 1)
+
+A long video is a folder `long/<NNN-slug>/` (same `NNN-slug` pattern as `videos/`) of chapter folders `ch<N>/`. A
+chapter holds the same code and data files as a Short (`Video.tsx` with `export const FRAMES = <int>;`, its own
+modules, `voice.wav`, `words.json`, `audio.json`, `shots.json`), no `meta.yml` / `SCRIPT.md`, plus `chapter.json`
+`{"n": <int>, "title": "<string>"}`. Engine imports are one level deeper: `../../../src/engine/<module>`.
+
+- `npm run gen` registers every chapter as the composition `ojl-<NNN-slug>-ch<N>`, 1920x1080 at 30 fps, wrapped in
+  `WithLongOverlay`: phrase subtitles (1-2 lines, Poppins, bottom of frame; never one word) from `words.json`, and a
+  "CHAPTER n / title" card from `chapter.json` for the first 3 s. Keep faces and the action out of the bottom 20 % of
+  the frame, where the subtitles sit.
+- The chapter renders its own `ThreeCanvas width={1920} height={1080}`. three.js `fov` is vertical, so a Short's
+  framing needs about 0.56x its fov in 16:9 for the same long-side view, then per-key re-framing.
+- Engine pixel sizes (ink, lens blur, grain, card rim) scale by `pxScale(width, height) = min(width, height) / 1080`,
+  so they are specified at the 1080-px short side and equal the Shorts' pixel values at 1920x1080. A bloom MIP chain is
+  sized for a fixed 1080-px short side.
+- `python tools/render_plan.py --long-chapter long/<NNN-slug>/ch<N>` plans the render; `render-long.yml` renders it
+  (dispatch only). `long/000-sample/ch1` is the bridge Short re-framed as the sample chapter.
+
 ## `audio.json`
 
 `python audio/build_mix.py videos/<id> out/<id>` turns `voice.wav` + `words.json` + `audio.json` into the soundtrack:

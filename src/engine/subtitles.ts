@@ -24,15 +24,17 @@ function wrap(words: string[], max: number): string[] {
 /**
  * Group words (sorted by start) into phrases. A phrase ends after a word ending in . ! ?, before a pause longer than
  * `gap` seconds, at `maxWords`, after a , or ; once it has 6 words, or earlier when it would need a third line.
+ * A one-word phrase is never left over (long chapters show no one-word captions): it takes the last word of the
+ * phrase before it when that phrase runs straight into it, else it joins a neighbour when the result still fits.
  */
 export function phrases(words: Word[], opts: PhraseOpts = {}): Phrase[] {
   const { maxWords = 10, maxLineChars = 42, gap = 0.4 } = opts;
-  const out: Phrase[] = [];
+  const groups: Word[][] = [];
   let cur: Word[] = [];
 
   const flush = () => {
     if (cur.length === 0) return;
-    out.push({ lines: wrap(cur.map((x) => x.w), maxLineChars), s: cur[0].s, e: cur[cur.length - 1].e });
+    groups.push(cur);
     cur = [];
   };
 
@@ -49,7 +51,24 @@ export function phrases(words: Word[], opts: PhraseOpts = {}): Phrase[] {
       (/[,;]$/.test(word.w) && cur.length >= MIN_WORDS_AT_COMMA);
     if (ends) flush();
   });
-  return out;
+
+  const fits = (g: Word[]) => wrap(g.map((x) => x.w), maxLineChars).length <= MAX_LINES;
+  const sentenceEnd = (g: Word[]) => /[.!?]["'”’)]*$/.test(g[g.length - 1].w);
+  for (let i = 0; i < groups.length; i++) {
+    if (groups[i].length !== 1 || groups.length === 1) continue;
+    const prev = groups[i - 1], next = groups[i + 1], lone = groups[i];
+    if (prev && prev.length >= 3 && !sentenceEnd(prev) && lone[0].s - prev[prev.length - 1].e <= gap) {
+      lone.unshift(prev.pop()!); // "... like a" + "swing." -> "... like" + "a swing."
+    } else if (next && fits([...lone, ...next])) {
+      groups.splice(i, 2, [...lone, ...next]);
+    } else if (prev && fits([...prev, ...lone])) {
+      groups.splice(i - 1, 2, [...prev, ...lone]);
+      i--;
+    } else if (prev && prev.length >= 3) {
+      lone.unshift(prev.pop()!);
+    }
+  }
+  return groups.map((g) => ({ lines: wrap(g.map((x) => x.w), maxLineChars), s: g[0].s, e: g[g.length - 1].e }));
 }
 
 /**

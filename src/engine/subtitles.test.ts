@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Word } from "./captions";
 import { phraseAt, phrases } from "./subtitles";
+import sample from "../../long/000-sample/ch1/words.json";
 
 /** words spoken back to back, 0.3 s each, starting at t0 (gaps are added by the caller via `gapBefore`) */
 function speak(text: string, gapBefore: Record<number, number> = {}): Word[] {
@@ -60,6 +61,19 @@ describe("phrases", () => {
       .flatMap((p) => p.lines)
       .join(" ");
     expect(joined).toBe(words.map((w) => w.w).join(" "));
+  });
+
+  it("never leaves a one-word phrase", () => {
+    // 11 words with no break: the 10-word cap would leave "swing." alone
+    const ps = phrases(speak("men stepping together were pushing that bridge like a big swing."));
+    expect(ps.map((p) => p.lines.join(" "))).toEqual(["men stepping together were pushing that bridge like a", "big swing."]);
+    // a lone word after a pause joins the next phrase
+    const q = phrases(speak("Unluckily, the river was deep.", { 1: 0.6 }));
+    expect(q.map((p) => p.lines.join(" "))).toEqual(["Unluckily, the river was deep."]);
+  });
+
+  it("has no one-word phrase in the sample chapter", () => {
+    for (const p of phrases(sample as Word[])) expect(p.lines.join(" ").split(" ").length).toBeGreaterThan(1);
   });
 
   it("returns nothing for no words", () => {

@@ -46,7 +46,11 @@ export const VIDEOS: VideoEntry[] = [
   { id: "012-suez-lighthouse-liberty", Component: V012, frames: F012, words: W012 as Word[] },
 ];
 
+import L0, { FRAMES as LF0 } from "../long/000-sample/ch1/Video";
+import LW0 from "../long/000-sample/ch1/words.json";
+
 export type LongChapter = { id: string; n: number; title: string; Component: React.FC; frames: number; words: Word[] | null };
 
 export const LONG_CHAPTERS: LongChapter[] = [
+  { id: "000-sample-ch1", n: 1, title: "The Bridge That Fell for a Song", Component: L0, frames: LF0, words: LW0 as Word[] },
 ];
