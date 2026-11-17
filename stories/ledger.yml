@@ -165,3 +165,16 @@
   date: "2026-11-17"
   kind: "true"
   category: sport
+- id: 014-shipwreck-lock-code
+  claim: "In November 2026 Museum Wales and Cardiff University read the four-letter code ANCE of a brass combination lock from the Ann Francis, wrecked on Margam beach in Wales in 1583, with micro-CT scans, and the lock opened for the first time in over four hundred years."
+  topics: [combination-lock, shipwreck, ct-scan, wales]
+  sources:
+    - https://www.smithsonianmag.com/smart-news/this-mysterious-combination-lock-sank-in-a-1583-shipwreck-when-engineers-cracked-the-code-it-clicked-open-for-the-first-time-in-more-than-400-years-180989864/
+    - https://www.jpost.com/archaeology/article-914060
+  scores: {strange: 5, obscurity: 4, people: 4, visual: 4, provable: 5}
+  status: coded
+  reason: ""
+  video: 014-shipwreck-lock-code
+  date: "2026-11-18"
+  kind: "news"
+  category: archaeology
