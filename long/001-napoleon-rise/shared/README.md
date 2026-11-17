@@ -49,6 +49,25 @@ face), `okey` keys the drawing cache, `o` is the engine `Outfit`, `expr` the def
 | `horseCard(cam, out, t, x, y, z, opts, mirror?, scale?)` | 2D side-view horse card (lit like the characters) + contact blobs. `opts`: `coat` (`HORSE_COATS.grey / bay / chestnut / black / dun`), `mane`, `pose` (`"stand" \| "walk" \| "gallop" \| "rear"`), `phase` (0..1 per stride for walk / gallop), `cloth` / `clothTrim` (saddle cloth, `null` = bare back), `rider` (any Char), `riderOpts` (side-view options: `expr`, `prop: ["sword", k]`, `pose` = forward lean), `blaze`, `socks` |
 | `drawHorse(pen, opts, light)`, `HORSE_SCALE`, `HORSE_COATS` | the raw drawing (on a person card at 1 / HORSE_SCALE) and constants |
 
+## notredame.ts
+
+Notre-Dame de Paris as it stood on 2 December 1804 (ch1 builds it, ch6 reuses it). Two independent builders, each a
+`THREE.Group` in its own local frame with the ground at y = 0; place each one wherever your world wants it (they never
+need to see each other) and add it to the root once (static, already batched):
+
+| Export | What it is |
+|---|---|
+| `notreDameExterior()` | the west front (two flat-topped towers, 69 m; three portals; the gallery of kings with EMPTY niches, the statues were pulled down in 1793; the rose; the open arcade), stepped buttresses and ledges in 3D, the nave and aisles behind with flying buttresses and a slate roof. No spire (removed 1786, rebuilt 1860). Origin: centre of the west front on the ground, front faces +z, the church runs toward -z (110 m). No ground: lay your parvis from z = 0 toward +z. Casts shadows, inked. |
+| `notreDameInterior()` | returns `{ group, spots }`: the nave dressed for the coronation. Origin: floor at the west door, nave centre line along -z; west wall with a glowing rose at z = +1, east (apse) wall with three lancets and a small rose at z = -56. Nave x -7..7 (vault apex 34 m), columns at x = +-7 every 6 m (z -4..-46), aisles to x = +-13. Red carpet with gold bees down the aisle, crimson banners with golden bees on every column, 9 rows of benches each side, a choir platform (3 steps, top 0.9 m from z = -39.2), the altar (gold-trimmed cloth, gold cross, six candles with glowing flames), the Pope's throne and the imperial throne (canopies). Glass is unlit and slightly over 1 (blooms), light shafts are additive NOINK planes. The shell does not cast shadows (the directional sun still lights the floor); columns, benches and furniture do. |
+| `ND_SPOTS` (= `spots`) | local positions: `platformY` 0.9; `napoleon` [0, 0.9, -45.2] (in front of the altar, facing the nave); `altar`; `popeThrone` [-5.4, 0.9, -46.6] and `imperialThrone` [5.4, 0.9, -46.6] (seat 0.55 m over the platform; stand people ~0.95 m in front, +z); `josephine` [2.6, 0.9, -44.2]; `guests` (54 [x, z] floor spots, 3 per side per row, rows z -10..-34); `guards` (along the carpet); `columns` ([x, z], radius 0.7 m). Add the group's position to every spot. |
+
+Usage (ch1 `world.ts`): `const nd = notreDameExterior(); nd.position.set(3000, 0, 0); root.add(nd);` and
+`const { group, spots } = notreDameInterior(); group.position.set(-3000, 0, 0); root.add(group);`. Gotchas: cameras inside
+the nave work best between y 1.5 and 10 (the vault is plain stone, the clerestory glass glows); a lens closer than ~1 m
+to a column or banner fills the frame; the aisle ceiling sits at 13 m, so aisle cameras must stay below it. Keep the
+interior fog far away (near >= 400) or the nave hazes over. Guests are cards: in shots looking down the nave from the
+west they face the camera (billboards), so the guest-faces-forward shots are the ones looking west from the choir.
+
 ## Engine additions (src/engine/toon.ts, all optional `Outfit` fields)
 
 Hats: `"bicorne"` (worn sideways: a wide crescent from the front, a tall narrow crescent in profile), `"bicorne_fa"`
