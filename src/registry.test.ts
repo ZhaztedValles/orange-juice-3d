@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
+type LongScan = { id: string; n: number; title: string };
+// the script has no type declarations, so import it through a string-typed specifier
+const GEN: string = "../scripts/gen-registry.mjs";
+const loadGen = async () => (await import(GEN)) as { scanLong: (dir?: string) => LongScan[] };
 
 describe("video registry", () => {
   it("is up to date with videos/", () => {
@@ -12,5 +19,29 @@ describe("video registry", () => {
     const { VIDEOS } = await import("./videos.generated");
     const b = VIDEOS.find((v) => v.id === "000-bridge");
     expect(b?.frames).toBe(2025);
+  });
+  it("lists no long chapters as Shorts", async () => {
+    const { VIDEOS, LONG_CHAPTERS } = await import("./videos.generated");
+    const { scanLong } = await loadGen();
+    const longIds = [...LONG_CHAPTERS.map((c) => c.id), ...scanLong().map((c) => c.id)];
+    for (const v of VIDEOS) for (const l of longIds) expect(v.id.startsWith(l)).toBe(false);
+    for (const v of VIDEOS) expect(v.id).not.toMatch(/-ch\d+$/);
+  });
+  it("scan skips a long folder without chapter.json", async () => {
+    const { scanLong } = await loadGen();
+    const tmp = mkdtempSync(path.join(tmpdir(), "oj-long-"));
+    try {
+      const ch = path.join(tmp, "long", "001-x", "ch1");
+      mkdirSync(ch, { recursive: true });
+      writeFileSync(path.join(ch, "Video.tsx"), "export const FRAMES = 30;\n");
+      expect(scanLong(path.join(tmp, "long"))).toEqual([]);
+      writeFileSync(path.join(ch, "chapter.json"), JSON.stringify({ n: 1, title: "One" }));
+      const got = scanLong(path.join(tmp, "long"));
+      expect(got).toHaveLength(1);
+      expect(got[0]).toMatchObject({ id: "001-x-ch1", n: 1, title: "One" });
+      expect(scanLong(path.join(tmp, "missing", "long"))).toEqual([]);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });

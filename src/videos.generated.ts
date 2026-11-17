@@ -45,3 +45,8 @@ export const VIDEOS: VideoEntry[] = [
   { id: "011-diamond-field-hoax", Component: V011, frames: F011, words: W011 as Word[] },
   { id: "012-suez-lighthouse-liberty", Component: V012, frames: F012, words: W012 as Word[] },
 ];
+
+export type LongChapter = { id: string; n: number; title: string; Component: React.FC; frames: number; words: Word[] | null };
+
+export const LONG_CHAPTERS: LongChapter[] = [
+];

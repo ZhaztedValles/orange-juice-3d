@@ -1,7 +1,7 @@
 // Thin-lens depth of field for the reference's soft backgrounds (reports/depth.md 6.1), as two deterministic gather
-// passes. CoC radius (px at 1080x1920) = cInf * |1 - focus / depth|, x nearScale in front of the focus plane,
-// clamped to maxCoC. Every pixel size is multiplied in the shader by (output height / 1920), so the picture is the
-// same at 540, 1080 and 1440 widths.
+// passes. CoC radius (px at the 1080 short side) = cInf * |1 - focus / depth|, x nearScale in front of the focus plane,
+// clamped to maxCoC. Every pixel size is px at the 1080 short side, scaled in the shader by min(width, height) / 1080,
+// so the picture is the same at 540, 1080 and 1440 widths and in 1920x1080 widescreen.
 //   pre  : 16-tap gather over 0.29 x the CoC. It fills the gaps between the main taps, so the composite kernel is a
 //          smooth disc (1024 effective taps) instead of 64 visible copies of every edge.
 //   main : 64-tap Vogel disc over 0.96 x the CoC (pre + main together = a disc of sigma CoC/2), plus a 32-tap near
@@ -15,9 +15,9 @@ import { Uniform } from "three";
 
 const frag = /* glsl */ `
 uniform float focus;      // focus distance along the view axis (m)
-uniform float cInf;       // blur-disc radius (px at 1080x1920) of things at infinity; 0 = off
+uniform float cInf;       // blur-disc radius (px at the 1080 short side) of things at infinity; 0 = off
 uniform float nearScale;  // extra blur for things in front of the focus plane
-uniform float maxCoC;     // px at 1080x1920
+uniform float maxCoC;     // px at the 1080 short side
 #define GOLDEN 2.39996323
 
 float cocAt(float d, float s) {               // signed CoC radius in output px
@@ -29,7 +29,7 @@ float distAt(vec2 uv) { return -getViewZ(readDepth(uv)); }
 
 void mainImage(const in vec4 inputColor, const in vec2 uv, const in float depth, out vec4 outputColor) {
   if (cInf < 0.25) { outputColor = inputColor; return; }
-  float s = resolution.y / 1920.0;             // output px per 1080x1920 px
+  float s = min(resolution.x, resolution.y) / 1080.0; // px at the 1080 short side, scaled by min(width, height) / 1080
   float d0 = -getViewZ(depth);
   float r0 = abs(cocAt(d0, s));
   float R = r0 * SPREAD;
@@ -107,16 +107,16 @@ export class LensBlur {
 // Monochrome value-noise grain in display (gamma) space, std ~2.5 % of the display value in the mid-tones, less in
 // deep blacks (ink stays black) and near white. Deterministic: the lattice is hashed with the frame number (PCG),
 // so the same frame always renders the same grain (no shimmer between identical frames) and the grain moves from
-// frame to frame like film. Grain cell size is given in px at 1080x1920 and scaled by output height / 1920, so the
+// frame to frame like film. Grain cell size is px at the 1080 short side, scaled by min(width, height) / 1080, so the
 // grain looks the same at 1080 and 1440 (a --scale 0.5 still averages it down by the browser's downscale).
 const grainFrag = /* glsl */ `
 uniform float seed;      // frame number
 uniform float amount;    // std of the grain in display units (0.025 = 2.5 %)
-uniform float cellPx;    // grain cell size in px at 1080x1920
+uniform float cellPx;    // grain cell size in px at the 1080 short side
 uint pcg(uint v) { uint s = v * 747796405u + 2891336453u; uint w = ((s >> ((s >> 28u) + 4u)) ^ s) * 277803737u; return (w >> 22u) ^ w; }
 float h3(ivec2 c, uint k) { return float(pcg(uint(c.x) + pcg(uint(c.y) + pcg(k)))) * (1.0 / 4294967295.0) - 0.5; }
 void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor) {
-  vec2 p = uv * resolution / (cellPx * resolution.y / 1920.0);
+  vec2 p = uv * resolution / (cellPx * min(resolution.x, resolution.y) / 1080.0);
   ivec2 i = ivec2(floor(p)); vec2 f = fract(p); f = f * f * (3.0 - 2.0 * f);
   uint k = uint(seed + 0.5) * 2654435761u + 1013904223u;
   float n = mix(mix(h3(i, k), h3(i + ivec2(1, 0), k), f.x), mix(h3(i + ivec2(0, 1), k), h3(i + ivec2(1, 1), k), f.x), f.y);

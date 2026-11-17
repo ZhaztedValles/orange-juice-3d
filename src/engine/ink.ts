@@ -1,6 +1,6 @@
 // Ink outlines for the 3D world, matched to the reference measurements (references/reports/outlines.md recipe,
-// post-agent changes: widths scale with the output height (pxScale = height / 1920, so 5.1 px at 1080x1920 is
-// 6.8 px at 1440x2560), RMAX 9 for headroom at 1440, fog-tinted ink (scene.fog, x0.3), `noInkFallback` below.
+// post-agent changes: widths are px at the 1080 short side, scaled by min(width, height) / 1080 (pxScale, so 5.1 px at
+// 1080x1920 is 6.8 px at 1440x2560), RMAX 9 for headroom at 1440, fog-tinted ink (scene.fog, x0.3), `noInkFallback` below.
 // Round 2: widths x1.5 (5.1 -> 3.3 px from 6 to 90 m), pure near-black #030303, far opacity 0.95, depth jumps from 1 %.
 //
 // How it works
@@ -24,6 +24,7 @@
 // measured EW 3.7 / 3.2 / 2.6 / 1.5 / 1.1 px at 3 / 12 / 25 / 90 / 200 m (silhouettes) and 2.3 -> 0.9 px (creases).
 import * as THREE from "three";
 import { Pass } from "postprocessing";
+import { pxScale } from "./math";
 
 /** Layer for things that must never be outlined (camera-facing sprites, sky, clouds, smoke). */
 export const NOINK = 3;
@@ -31,7 +32,7 @@ export const NOINK = 3;
 export type InkOptions = {
   color?: THREE.ColorRepresentation; // sRGB hex of the ink
   strength?: number; // max opacity
-  widthNear?: number; // silhouette / depth-jump line width in px at distNear (1080x1920 output)
+  widthNear?: number; // silhouette / depth-jump line width in px at distNear (px at the 1080 short side)
   widthFar?: number; // ... at distFar
   distNear?: number; // m
   distFar?: number; // m
@@ -115,7 +116,7 @@ uniform float fadeNear;
 uniform float fadeFar;
 uniform float strength;
 uniform float useMain;
-uniform float pxScale;   // output px per 1080x1920 px
+uniform float pxScale;   // output px per px at the 1080 short side
 uniform vec2 fogRange;   // scene fog near / far (m); far <= near = no fog tint
 uniform float fogStart;  // ink stays pure black up to here (m), then tints toward the fog colour
 varying vec2 vUv;
@@ -318,7 +319,7 @@ export class InkPass extends Pass {
     this.maskRT.setSize(width, height);
     this.tmpRT.setSize(width, height);
     (this.maskMat.uniforms.texel.value as THREE.Vector2).set(1 / width, 1 / height);
-    this.maskMat.uniforms.pxScale.value = height / 1920; // widths are specified at 1080x1920
+    this.maskMat.uniforms.pxScale.value = pxScale(width, height); // px at the 1080 short side, scaled by min(width, height) / 1080
   }
 
   override render(renderer: THREE.WebGLRenderer, inputBuffer: THREE.WebGLRenderTarget) {
