@@ -178,3 +178,17 @@
   date: "2026-11-18"
   kind: "news"
   category: archaeology
+- id: 015-airship-polo-secret
+  claim: "In June 1903 nineteen-year-old Aida de Acosta flew Alberto Santos-Dumont's airship No. 9 alone over Paris to a polo match at Bagatelle while he followed on a bicycle, becoming the first woman to pilot a powered aircraft, and her parents kept it secret for about thirty years."
+  topics: [aida-de-acosta, santos-dumont, airship, first-woman-pilot]
+  sources:
+    - https://en.wikipedia.org/wiki/Aida_de_Acosta
+    - https://theappendix.net/issues/2014/4/the-aviators-heart
+    - https://medium.com/faa/aida-de-acosta-americas-first-pilot-3ae7a88d055f
+  scores: {strange: 4, obscurity: 4, people: 5, visual: 5, provable: 4}
+  status: coded
+  reason: ""
+  video: 015-airship-polo-secret
+  date: "2026-11-18"
+  kind: "true"
+  category: aviation
