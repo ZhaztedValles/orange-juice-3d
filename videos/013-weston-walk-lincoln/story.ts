@@ -162,6 +162,9 @@ const S5a = (f: number) => { const x = westonX(5, T(f)); return dolly([x + 2.0, 
 const S6a = (f: number) => dolly([VIL[0] + 5, Y + 2.3, VIL[2] + 0.8], [VIL[0] - 14, Y + 1.4, VIL[2] - 0.3], pushK(f, 786, 0.0016, 0.004, 30), { fov: 50, roll: 0.03 });
 // shot 7: the mud: he falls, sprains his ankle, limps on; the clock falls behind
 const S7a = (f: number) => { const x = westonX(7, T(f)); return dolly([x + 1.3, Y + 1.6, RZ + 3.8], [x + 0.4, Y + 1.0, RZ], pushK(f, 876, 0.0024, 0.006, 30), { fov: 42, roll: 0.03 }); };
+// shot 7, "keeps going": a hard cut wider and lower as he gets up and limps on (the cut hides the sit-to-walk change)
+export const F_KEEPS = fr(T_KEEPS - 0.1);
+const S7b = (f: number) => { const x = westonX(7, T(f)); return dolly([x + 2.6, Y + 1.2, RZ + 4.6], [x + 0.6, Y + 1.05, RZ], pushK(f, F_KEEPS, 0.0024, 0.006, 30), { fov: 44, roll: -0.03 }); };
 // shot 8: you see: low by his boots in the mud
 const S8a = (f: number) => { const x = westonX(8, T(f)); return dolly([x + 1.8, Y + 0.85, RZ + 2.6], [x, Y + 0.7, RZ], pushK(f, 1017, 0.0024, 0.006, 30), { fov: 40, roll: -0.04 }); };
 // shot 9: the beach: someone trudging over soft sand, the sea behind
@@ -187,7 +190,7 @@ export const CAMS: Record<number, Key[]> = {
   4: [{ f: 514, s: S4a }],
   5: [{ f: 678, s: S5a }],
   6: [{ f: 786, s: S6a }],
-  7: [{ f: 876, s: S7a }],
+  7: [{ f: 876, s: S7a }, { f: F_KEEPS, cut: true, s: S7b }],
   8: [{ f: 1017, s: S8a }],
   9: [{ f: 1100, s: S9a }],
   10: [{ f: 1300, s: S10a }],
@@ -197,8 +200,8 @@ export const CAMS: Record<number, Key[]> = {
   14: [{ f: 1824, s: S14a }],
 };
 
-// impact kicks: [seconds, strength]: "Lincoln wins.", the fall in the mud, the handshake
-const KICKS: [number, number][] = [[T_WINS - 2 / 30, 0.6], [T_FALLS - 2 / 30, 0.6], [T_SHOOK - 2 / 30, 0.35]];
+// impact kicks: [seconds, strength]: "Lincoln wins.", the fall in the mud, the sprain, the handshake
+const KICKS: [number, number][] = [[T_WINS - 2 / 30, 0.6], [T_FALLS - 2 / 30, 0.6], [T_SPRAINS - 2 / 30, 0.35], [T_SHOOK - 2 / 30, 0.35]];
 export const KICK_FRAMES = KICKS.map(([t]) => Math.floor(t * FPS + 1e-6));
 export const kickAt = (t: number) => {
   let a = 0;
