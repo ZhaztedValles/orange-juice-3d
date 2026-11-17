@@ -80,12 +80,13 @@ const front = (cam: CamInfo, t: number, out: Stage, i: number, o: Outfit, okey: 
   out.places.push(person(cam, who(i, o, okey), x, y, z, { side: false, mirror: false }, { mode: "stand", expr, blink: lidAt(t, i), ...extra }, {}, 1));
   blob(out, x, y, z, o.build === "kid" ? 0.8 : 1);
 };
-/** someone walking along (dx, dz): side or front view picked from the camera, legs in step with the ground speed */
+/** someone walking along (dx, dz): side or front view picked from the camera, legs in step with the ground speed; the phase
+ *  is quantized finely (48 poses per cycle) so even a slow limp changes pose every frame instead of jumping every third one */
 const walker = (cam: CamInfo, t: number, out: Stage, i: number, o: Outfit, okey: string, x: number, z: number, dx: number, dz: number, phase: number, expr: Expr,
   so: SideOpts = {}, y = D0, fo: FrontOpts = {}) => {
   const v = viewOf(cam, x, z, dx, dz);
   out.places.push(person(cam, who(i, o, okey), x, y, z, { side: v.side, mirror: v.mirror },
-    { mode: "march", phase: q(phase, 16), expr, blink: lidAt(t, i), ...fo }, { mode: "march", phase: q(phase, 16), expr, blink: lidAt(t, i), stride: Math.max(0.3, v.fs), ...so }, 1));
+    { mode: "march", phase: q(phase, 48), expr, blink: lidAt(t, i), ...fo }, { mode: "march", phase: q(phase, 48), expr, blink: lidAt(t, i), stride: Math.max(0.3, v.fs), ...so }, 1));
   blob(out, x, y, z, o.build === "kid" ? 0.8 : 1);
 };
 /** a card that grows in from t0 over d seconds (scale 0 -> 1, the drawing never changes, so no frame jumps) */
