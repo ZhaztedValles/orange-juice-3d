@@ -193,8 +193,9 @@ export const CAMS: Record<number, Key[]> = {
   14: [{ f: 1696, s: S14a }, { f: fr(T_NAME) - 3, dur: 40, s: S14b }],
 };
 
-// impact kicks: [seconds, strength]: the lock clicks open (hook), the storm, the lock opens at the museum
-const KICKS: [number, number][] = [[T_CLICKED - 2 / 30, 0.45], [T_STORM - 2 / 30, 0.6], [T_OPENED - 2 / 30, 0.45]];
+// impact kicks: [seconds, strength]: the lock clicks open (hook), the storm, the detector finds treasure, the lock opens at
+// the museum, "the Ark" (the bursts of light start on these planned kick frames)
+const KICKS: [number, number][] = [[T_CLICKED - 2 / 30, 0.45], [T_STORM - 2 / 30, 0.6], [T_TREASURE - 2 / 30, 0.3], [T_OPENED - 2 / 30, 0.45], [T_ARK - 2 / 30, 0.3]];
 export const KICK_FRAMES = KICKS.map(([t]) => Math.floor(t * FPS + 1e-6));
 export const kickAt = (t: number) => {
   let a = 0;
