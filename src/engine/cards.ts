@@ -8,7 +8,7 @@ import * as THREE from "three";
 import { Pen, bodyFront, bodySide, fxShadow, fxContact, Outfit, FrontOpts, SideOpts } from "./toon";
 import { NOINK } from "./ink";
 import { cardShade, blobMaterial, CARD_K } from "./cardshade";
-import { clamp01 } from "./math";
+import { clamp01, pxScale } from "./math";
 
 // ---------------- canvas pool ----------------
 type Entry = { cv: HTMLCanvasElement; tex: THREE.CanvasTexture; w: number; h: number };
@@ -70,8 +70,8 @@ export class Actor {
     this.dmat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: blank(), alphaTest: 0.5, side: THREE.DoubleSide });
     this.mesh = new THREE.Mesh(geo, this.mat);
     this.mesh.customDepthMaterial = this.dmat;
-    // rim width is in output pixels: tell the card shader the render height (1920 = 1080 x 1920 frame)
-    this.mesh.onBeforeRender = (r) => { const rt = r.getRenderTarget(); CARD_K.uPx.value = (rt ? rt.height : r.domElement.height) / 1920; };
+    // rim width is px at the 1080 short side: tell the card shader min(width, height) / 1080 of the render target
+    this.mesh.onBeforeRender = (r) => { const rt = r.getRenderTarget(); CARD_K.uPx.value = rt ? pxScale(rt.width, rt.height) : pxScale(r.domElement.width, r.domElement.height); };
     this.mesh.castShadow = false; this.mesh.receiveShadow = true; this.mesh.visible = false;
     this.mesh.rotation.order = "YXZ"; this.mesh.renderOrder = 1; this.mesh.layers.set(NOINK);
     parent.add(this.mesh);

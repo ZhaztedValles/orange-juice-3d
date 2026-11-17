@@ -40,6 +40,14 @@ describe("video registry", () => {
       expect(got).toHaveLength(1);
       expect(got[0]).toMatchObject({ id: "001-x-ch1", n: 1, title: "One" });
       expect(scanLong(path.join(tmp, "missing", "long"))).toEqual([]);
+      // sorted by the long folder id, then n numerically: ch2 before ch10
+      for (const [video, ch, n] of [["002-y", "ch10", 10], ["002-y", "ch2", 2], ["000-a", "ch1", 1]] as const) {
+        const d = path.join(tmp, "long", video, ch);
+        mkdirSync(d, { recursive: true });
+        writeFileSync(path.join(d, "Video.tsx"), "export const FRAMES = 30;\n");
+        writeFileSync(path.join(d, "chapter.json"), JSON.stringify({ n, title: `T${n}` }));
+      }
+      expect(scanLong(path.join(tmp, "long")).map((c) => c.id)).toEqual(["000-a-ch1", "001-x-ch1", "002-y-ch2", "002-y-ch10"]);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

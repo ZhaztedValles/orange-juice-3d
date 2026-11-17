@@ -31,7 +31,7 @@ export const scan = (dir = VIDEOS) => {
   return ids.map((id) => ({ id, n: id.slice(0, 3), words: fs.existsSync(path.join(dir, id, "words.json")) }));
 };
 
-// Long video chapters, sorted by id then n. A chapter without Video.tsx or a valid chapter.json is skipped with a warning.
+// Long video chapters, sorted by long folder id, then n numerically (ch2 before ch10). A chapter without Video.tsx or a valid chapter.json is skipped with a warning.
 export const scanLong = (dir = LONG) => {
   const out = [];
   const dirs = (d) => (fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name) : []);
@@ -46,10 +46,10 @@ export const scanLong = (dir = LONG) => {
       if (!meta || !Number.isInteger(meta.n) || meta.n < 1 || typeof meta.title !== "string" || !meta.title.trim()) {
         console.warn(`gen-registry: skipping ${where} (needs chapter.json {"n": <int>, "title": "<string>"})`); continue;
       }
-      out.push({ id: `${video}-${ch}`, video, ch, n: meta.n, title: meta.title, words: fs.existsSync(path.join(folder, "words.json")) });
+      out.push({ id: `${video}-${ch}`, video, ch, chNum: Number(ch.slice(2)), n: meta.n, title: meta.title, words: fs.existsSync(path.join(folder, "words.json")) });
     }
   }
-  out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : a.n - b.n));
+  out.sort((a, b) => (a.video < b.video ? -1 : a.video > b.video ? 1 : a.n - b.n || a.chNum - b.chNum));
   return out;
 };
 
