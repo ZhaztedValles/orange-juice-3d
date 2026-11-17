@@ -3,6 +3,13 @@
   python autopilot/publish.py youtube [--dry-run]   # post the next queued Short if a slot is open
   python autopilot/publish.py cleanup               # delete the queue assets of ids that have a posted record
   python autopilot/publish.py report                # queue depth, held count, days of videos left
+  python autopilot/publish.py youtube-long [--dry-run]   # post the next queued long video if a long slot is open
+  python autopilot/publish.py cleanup-long               # same as cleanup, for the queue-long release
+
+Long videos (L<NNN>-<slug>) work the same way with their own release (queue-long: <id>.mp4 + <id>.yml + optional
+<id>.jpg thumbnail), their own slots (config.yml `long_slots`), their own records (state/posted-long/) and so their own
+slot guard: a long post and a Short post never block each other. The thumbnail is set after the upload; a failed
+thumbnail is a warning (the channel must be phone-verified for custom thumbnails), never a failed post.
 
 One feed, no playlists. `youtube` is triggered by cron-job.org at each slot (GitHub's own cron is the backup) and never
 by hand. A run posts only when it is inside a slot's window (slot <= now < slot + slot_window_minutes, Manila time) and
@@ -26,16 +33,17 @@ import yaml
 import common
 import youtube
 from common import summary
-from store import get_store
+from store import LONG_TAG, get_store
 
 TIMEZONE_DEFAULT = "Asia/Manila"
 
 
-def slot_cfg(cfg):
-    """(tz, slots as ["HH:MM"], window as timedelta); raises on a config that cannot work"""
-    slots = cfg.get("slots")
+def slot_cfg(cfg, key="slots"):
+    """(tz, slots as ["HH:MM"], window as timedelta); raises on a config that cannot work. key: "slots" (Shorts) or
+    "long_slots" (long videos)"""
+    slots = cfg.get(key)
     if not isinstance(slots, list) or not slots:
-        raise RuntimeError("config.yml: `slots` must be a non-empty list like [\"19:00\"]")
+        raise RuntimeError(f"config.yml: `{key}` must be a non-empty list like [\"19:00\"]")
     for s in slots:
         try:
             time.fromisoformat(str(s))
@@ -47,10 +55,10 @@ def slot_cfg(cfg):
     return ZoneInfo(cfg.get("timezone", TIMEZONE_DEFAULT)), [str(s) for s in slots], timedelta(minutes=window)
 
 
-def current_slot(cfg, t):
+def current_slot(cfg, t, key="slots"):
     """The slot (local time) whose window contains t, or None. Yesterday's slots count too, so a slot near midnight
     still covers the first minutes of the next day. The latest matching slot wins."""
-    tz, slots, window = slot_cfg(cfg)
+    tz, slots, window = slot_cfg(cfg, key)
     local = t.astimezone(tz)
     best = None
     for day in (local.date() - timedelta(days=1), local.date()):
@@ -65,9 +73,9 @@ def slot_key(start):
     return start.strftime("%Y-%m-%dT%H:%M")
 
 
-def load_queue(store, tmp, cfg):
+def load_queue(store, tmp, cfg, long=False):
     """(good items with .meta, problems). Templates are marked item.template; invalid ones are reported and dropped."""
-    items, problems = common.group_assets(store.names())
+    items, problems = common.group_assets(store.names(), long)
     if items:
         store.download("*.yml", tmp)
     good = []
@@ -88,13 +96,13 @@ def load_queue(store, tmp, cfg):
     return good, problems
 
 
-def run_cleanup(store):
+def run_cleanup(store, long=False):
     """delete the queue assets (<id>.mp4 / <id>.yml) of every id that has a state/posted record. A failed delete is a
     warning: the next run tries again, and a posted id is never re-posted whether or not its assets are still there."""
-    posted = common.load_posted()
+    posted = common.load_posted(long)
     removed = 0
     for name in store.names():
-        m = common.NAME_RE.match(name)
+        m = (common.LONG_NAME_RE if long else common.NAME_RE).match(name)
         if not m or m.group(1) not in posted:
             continue
         try:
@@ -102,7 +110,8 @@ def run_cleanup(store):
             removed += 1
         except Exception as e:  # noqa: BLE001
             print(f"::warning::Could not delete {name} from the queue release: {e}")
-    summary(f"Cleanup: removed {removed} posted asset(s) from the queue release")
+    release = "queue-long" if long else "queue"
+    summary(f"Cleanup: removed {removed} posted asset(s) from the {release} release")
     return 0
 
 
@@ -131,7 +140,7 @@ def _config_ok(cfg):
         return False
 
 
-def run_youtube(cfg, store, tmp, dry):
+def run_youtube(cfg, store, tmp, dry, long=False):
     if not _config_ok(cfg):
         return 1
     yc = cfg["youtube"]
@@ -142,10 +151,11 @@ def run_youtube(cfg, store, tmp, dry):
         summary("YouTube posting is turned off in config.yml")
         return 0
 
+    what = "long video" if long else "Short"
     t = common.now()
-    slot = current_slot(cfg, t)
+    slot = current_slot(cfg, t, "long_slots" if long else "slots")
     key = slot_key(slot) if slot else None
-    posted = common.load_posted()
+    posted = common.load_posted(long)
     guard = next((p for p in posted.values() if key and p.get("slot") == key), None)
     if dry:
         if slot is None:
@@ -157,7 +167,7 @@ def run_youtube(cfg, store, tmp, dry):
             summary("Outside every slot window: nothing to do.")
             return 0
         if guard:
-            summary(f"Slot {key} already has a post ({guard.get('id')}): one Short per slot, nothing to do.")
+            summary(f"Slot {key} already has a post ({guard.get('id')}): one {what} per slot, nothing to do.")
             return 0
         missing = youtube.missing_secrets()
         if missing:
@@ -166,7 +176,7 @@ def run_youtube(cfg, store, tmp, dry):
             return 1
 
     rc_dry = _dry_connection_check(cfg) if dry else 0
-    items, _ = load_queue(store, tmp, cfg)
+    items, _ = load_queue(store, tmp, cfg, long)
     candidates = []
     for it in items:
         if it.id in posted:                       # posted earlier, assets not cleaned up yet: never re-post
@@ -197,14 +207,22 @@ def run_youtube(cfg, store, tmp, dry):
 
     try:
         store.download(it.mp4, tmp)
-        res = youtube.publish(Path(tmp) / it.mp4, it.meta, cfg)
+        if long:
+            if it.jpg:
+                store.download(it.jpg, tmp)
+            res = youtube.publish_long(Path(tmp) / it.mp4, it.meta, cfg, Path(tmp) / it.jpg if it.jpg else None)
+        else:
+            res = youtube.publish(Path(tmp) / it.mp4, it.meta, cfg)
     except Exception as e:  # noqa: BLE001
         summary(f"Upload of {it.id} failed: {e}")
         print(f"::error::Upload of {it.id} failed: {e}")
         return 1
     # the upload happened: record it first, so nothing below can ever cause a second post
-    common.write_posted(it.id, {"id": it.id, "url": res["url"], "slot": key, "posted_at": common.iso()})
+    common.write_posted(it.id, {"id": it.id, "url": res["url"], "slot": key, "posted_at": common.iso()}, long)
     summary(f"Posted {it.id}: {res['url']} (its assets stay queued until `cleanup` runs after the state is saved)")
+    if long and res.get("thumbnail") not in ("set", "none"):
+        summary(f"Thumbnail not set: {res['thumbnail']}")
+        print(f"::warning::{it.id}: thumbnail not set ({res['thumbnail']}); is the channel phone-verified?")
     return 0
 
 
@@ -230,15 +248,19 @@ def run_report(cfg, store, tmp):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("mode", choices=["youtube", "cleanup", "report"])
+    ap.add_argument("mode", choices=["youtube", "cleanup", "report", "youtube-long", "cleanup-long"])
     ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args()
     if a.mode == "cleanup":
         return run_cleanup(get_store())
+    if a.mode == "cleanup-long":
+        return run_cleanup(get_store(LONG_TAG), long=True)
     cfg = common.load_config()
     with tempfile.TemporaryDirectory() as tmp:
         if a.mode == "youtube":
             return run_youtube(cfg, get_store(), tmp, a.dry_run)
+        if a.mode == "youtube-long":
+            return run_youtube(cfg, get_store(LONG_TAG), tmp, a.dry_run, long=True)
         return run_report(cfg, get_store(), tmp)
 
 

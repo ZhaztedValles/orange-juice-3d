@@ -16,6 +16,8 @@ TEMPLATE_IDS = ("000-bridge",)      # the template is never queued or posted, wh
 # Queue files are <id>.mp4 + <id>.yml; the id is the video folder name (same pattern as tools/video_check.py)
 ID_RE = re.compile(r"\d{3}-[a-z0-9-]{3,50}")
 NAME_RE = re.compile(r"^(\d{3}-[a-z0-9-]{3,50})\.(mp4|yml)$")
+# long videos (queue-long release): L<NNN>-<slug>.mp4 + .yml, and an optional .jpg thumbnail
+LONG_NAME_RE = re.compile(r"^(L\d{3}-[a-z0-9-]{3,50})\.(mp4|yml|jpg)$")
 
 
 def load_config():
@@ -34,50 +36,54 @@ def iso(dt=None):
 
 
 class Item:
-    """One video in the queue: <id>.mp4 + <id>.yml"""
+    """One video in the queue: <id>.mp4 + <id>.yml (+ <id>.jpg thumbnail for a long video, when present)"""
 
-    def __init__(self, vid):
+    def __init__(self, vid, jpg=False):
         self.id = vid
         self.mp4, self.yml = f"{vid}.mp4", f"{vid}.yml"
+        self.jpg = f"{vid}.jpg" if jpg else None
         self.meta = None
 
     def __repr__(self):
         return self.id
 
 
-def group_assets(names):
-    """Turn the queue's file names into Items (sorted by id), plus a list of problems."""
+def group_assets(names, long=False):
+    """Turn the queue's file names into Items (sorted by id), plus a list of problems. long=True reads the queue-long
+    names (L001-some-title.mp4 / .yml, optional .jpg thumbnail)."""
     seen, problems = {}, []
+    rx = LONG_NAME_RE if long else NAME_RE
     for n in names:
-        m = NAME_RE.match(n)
+        m = rx.match(n)
         if not m:
-            problems.append(f"'{n}' doesn't follow the naming pattern <id>.mp4 / <id>.yml (id like 001-some-title)")
+            pattern = "<id>.mp4 / <id>.yml / <id>.jpg (id like L001-some-title)" if long else                 "<id>.mp4 / <id>.yml (id like 001-some-title)"
+            problems.append(f"'{n}' doesn't follow the naming pattern {pattern}")
             continue
         seen.setdefault(m.group(1), set()).add(m.group(2))
     items = []
     for vid, exts in seen.items():
-        if exts != {"mp4", "yml"}:
+        if not {"mp4", "yml"} <= exts:
             problems.append(f"{vid} is missing its .{({'mp4', 'yml'} - exts).pop()} file")
             continue
-        items.append(Item(vid))
+        items.append(Item(vid, jpg="jpg" in exts))
     items.sort(key=lambda i: i.id)
     return items, problems
 
 
 # ---------------------------------------------------------------- state/posted and state/approved.yml
-def posted_dir():
-    return STATE / "posted"
+def posted_dir(long=False):
+    return STATE / ("posted-long" if long else "posted")
 
 
-def load_posted():
-    """{id: record} from state/posted/*.json"""
-    d = posted_dir()
+def load_posted(long=False):
+    """{id: record} from state/posted/*.json (long videos: state/posted-long/*.json)"""
+    d = posted_dir(long)
     return {p.stem: json.loads(p.read_text(encoding="utf-8")) for p in sorted(d.glob("*.json"))} if d.is_dir() else {}
 
 
-def write_posted(vid, record):
-    posted_dir().mkdir(parents=True, exist_ok=True)
-    (posted_dir() / f"{vid}.json").write_text(json.dumps(record, indent=1) + "\n", encoding="utf-8")
+def write_posted(vid, record, long=False):
+    posted_dir(long).mkdir(parents=True, exist_ok=True)
+    (posted_dir(long) / f"{vid}.json").write_text(json.dumps(record, indent=1) + "\n", encoding="utf-8")
 
 
 def load_approved():

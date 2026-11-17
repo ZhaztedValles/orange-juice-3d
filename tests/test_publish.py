@@ -706,3 +706,149 @@ def test_post_job_uses_youtube_environment():
     import yaml
     wf = yaml.safe_load((Path(__file__).resolve().parent.parent / ".github" / "workflows" / "post.yml").read_text(encoding="utf-8"))
     assert wf["jobs"]["post"]["environment"] == "youtube"
+
+
+# ------------------------------------------------------------------ long videos (queue-long, long_slots, state/posted-long)
+LONG_TIME = datetime(2026, 11, 18, 8, 5, tzinfo=MANILA)      # 5 min after the 08:00 long slot
+
+
+def long_cfg(**over):
+    return base_cfg(long_slots=["08:00"], **over)
+
+
+@pytest.fixture
+def lenv(env, monkeypatch):
+    calls = []
+
+    def fake_publish_long(path, meta, cfg, thumbnail=None):
+        assert Path(path).exists() and Path(path).suffix == ".mp4"
+        if thumbnail is not None:
+            assert Path(thumbnail).exists() and Path(thumbnail).suffix == ".jpg"
+        calls.append((meta["title"], thumbnail is not None))
+        return {"id": "LV1", "url": "https://www.youtube.com/watch?v=LV1", "thumbnail": "set" if thumbnail else "none"}
+
+    monkeypatch.setattr(youtube, "publish_long", fake_publish_long)
+    env.long_calls = calls
+    env.at(LONG_TIME)
+    env.run_long = lambda cfg=None, dry=False: publish.run_youtube(cfg or long_cfg(), env.store, str(env.tmp / "dl"), dry, long=True)
+    env.posted_long = lambda: sorted(p.stem for p in (env.state / "posted-long").glob("*.json"))
+    return env
+
+
+def add_long(store, vid="L001-napoleon-rise", jpg=True):
+    store.add(vid)
+    if jpg:
+        store.files[f"{vid}.jpg"] = b"jpeg"
+
+
+def test_long_posts_in_its_slot_with_thumbnail_and_its_own_record(lenv):
+    add_long(lenv.store)
+    assert lenv.run_long() == 0
+    assert lenv.long_calls == [("Title L001-napoleon-rise", True)] and lenv.calls == []
+    assert lenv.posted_long() == ["L001-napoleon-rise"] and lenv.posted() == []
+    rec = json.loads((lenv.state / "posted-long" / "L001-napoleon-rise.json").read_text(encoding="utf-8"))
+    assert rec["slot"] == "2026-11-18T08:00" and rec["url"].endswith("watch?v=LV1")
+    assert "L001-napoleon-rise.mp4" in lenv.store.files          # assets stay until cleanup-long
+
+
+def test_long_without_thumbnail_still_posts(lenv):
+    add_long(lenv.store, jpg=False)
+    assert lenv.run_long() == 0
+    assert lenv.long_calls == [("Title L001-napoleon-rise", False)]
+
+
+def test_long_thumbnail_failure_is_a_warning_not_a_failure(lenv, monkeypatch, capsys):
+    add_long(lenv.store)
+    monkeypatch.setattr(youtube, "publish_long", lambda p, m, c, thumbnail=None:
+                        {"id": "LV1", "url": "https://www.youtube.com/watch?v=LV1", "thumbnail": "failed: 403"})
+    assert lenv.run_long() == 0
+    assert lenv.posted_long() == ["L001-napoleon-rise"]
+    assert "thumbnail not set" in capsys.readouterr().out
+
+
+def test_long_does_nothing_in_a_shorts_slot(lenv):
+    add_long(lenv.store)
+    lenv.at(SLOT_TIME)                                       # 19:05: a Shorts slot, not a long one
+    assert lenv.run_long() == 0
+    assert lenv.long_calls == [] and lenv.posted_long() == []
+
+
+def test_long_runs_once_per_slot_and_shorts_never_block_it(lenv):
+    add_long(lenv.store)
+    add_long(lenv.store, "L002-other-story")
+    common.write_posted("005-some-short", {"id": "005-some-short", "slot": "2026-11-18T08:00"})   # same key, Shorts guard
+    assert lenv.run_long() == 0 and lenv.posted_long() == ["L001-napoleon-rise"]
+    assert lenv.run_long() == 0 and lenv.posted_long() == ["L001-napoleon-rise"]   # second trigger: guard holds
+
+
+def test_shorts_ignore_long_records_and_long_assets(env, capsys):
+    env.store.add("001-short-one")
+    common.write_posted("L001-napoleon-rise", {"id": "L001-napoleon-rise", "slot": "2026-11-09T19:00"}, long=True)
+    assert env.run() == 0
+    assert env.posted() == ["001-short-one"]
+
+
+def test_long_cleanup_removes_only_posted_long_assets(lenv):
+    add_long(lenv.store)
+    add_long(lenv.store, "L002-other-story")
+    lenv.run_long()
+    publish.run_cleanup(lenv.store, long=True)
+    assert sorted(lenv.store.files) == ["L002-other-story.jpg", "L002-other-story.mp4", "L002-other-story.yml"]
+
+
+def test_long_dry_run_writes_nothing(lenv):
+    add_long(lenv.store)
+    assert lenv.run_long(dry=True) == 0
+    assert lenv.long_calls == [] and lenv.posted_long() == []
+
+
+def test_group_assets_long_names():
+    items, problems = common.group_assets(["L001-a-story.mp4", "L001-a-story.yml", "L001-a-story.jpg",
+                                           "L002-no-thumb.mp4", "L002-no-thumb.yml", "L003-only-video.mp4",
+                                           "004-a-short.mp4"], long=True)
+    assert [(i.id, i.jpg) for i in items] == [("L001-a-story", "L001-a-story.jpg"), ("L002-no-thumb", None)]
+    assert len(problems) == 2                                 # L003 lacks its yml; a Short name is not a long name
+    items, problems = common.group_assets(["L001-a-story.mp4", "L001-a-story.yml"])
+    assert items == [] and len(problems) == 2                 # the Shorts queue never accepts long names
+
+
+def test_local_store_long_tag_uses_a_subfolder(tmp_path, monkeypatch):
+    monkeypatch.setenv("OJ_LOCAL_QUEUE", str(tmp_path))
+    assert store.get_store().dir == tmp_path
+    assert store.get_store(store.LONG_TAG).dir == tmp_path / "queue-long"
+
+
+def test_posted_long_dir_is_tracked():
+    assert (ROOT / "state" / "posted-long" / ".gitkeep").exists()
+
+
+LONG_WORKFLOW = ROOT / ".github" / "workflows" / "post-long.yml"
+
+
+def test_long_slot_has_a_backup_cron_and_the_workflow_mirrors_post():
+    cfg = yaml.safe_load((ROOT / "config.yml").read_text(encoding="utf-8"))
+    wf = yaml.safe_load(LONG_WORKFLOW.read_text(encoding="utf-8"))
+    if True in wf:
+        wf["on"] = wf.pop(True)
+    covered = set()
+    for s in wf["on"]["schedule"]:
+        minute, hour, dom, mon, dow = s["cron"].split()
+        assert dom == mon == dow == "*"
+        for h in (int(x) for x in hour.split(",")):
+            covered.add((h * 60 + int(minute) + 8 * 60) % 1440)
+    for slot in cfg["long_slots"]:
+        sh, sm = (int(x) for x in slot.split(":"))
+        assert any(0 <= (c - (sh * 60 + sm)) % 1440 < cfg["slot_window_minutes"] for c in covered), slot
+    assert wf["permissions"] == {} and wf["concurrency"]["group"] == "oj-post-long"
+    assert wf["on"]["workflow_dispatch"]["inputs"]["dry_run"]["default"] is True
+    job = wf["jobs"]["post"]
+    assert job["environment"] == "youtube" and job["permissions"] == {"contents": "write"}
+    for s in job["steps"]:
+        assert "${{" not in s.get("run", ""), s
+        has_secret = any("secrets." in str(v) for v in s.get("env", {}).values())
+        assert has_secret == (s.get("name") == "Post to YouTube"), s.get("name")
+    names = [s.get("name") for s in job["steps"]]
+    assert names.index("Post to YouTube") < names.index("Save progress") < names.index("Cleanup posted assets")
+    text = LONG_WORKFLOW.read_text(encoding="utf-8")
+    assert "publish.py youtube-long" in text and "publish.py cleanup-long" in text
+    assert "actions/cache" not in text

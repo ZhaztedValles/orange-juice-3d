@@ -32,9 +32,29 @@ def _client():
 
 
 def publish(video_path, meta, cfg):
-    """upload one video; returns {"id": video id, "url": shorts url}"""
-    yc = cfg["youtube"]
+    """upload one Short; returns {"id": video id, "url": shorts url}"""
+    vid = _upload(_client(), video_path, meta, cfg)
+    return {"id": vid, "url": f"https://youtube.com/shorts/{vid}"}
+
+
+def publish_long(video_path, meta, cfg, thumbnail=None):
+    """upload one long video and set its thumbnail (when given); returns {"id", "url", "thumbnail"}, where thumbnail
+    is "set", "none" or the error text. A failed thumbnail never fails the post: the video is already public (custom
+    thumbnails need a phone-verified channel)."""
     yt = _client()
+    vid = _upload(yt, video_path, meta, cfg)
+    thumb = "none"
+    if thumbnail:
+        try:
+            yt.thumbnails().set(videoId=vid, media_body=MediaFileUpload(str(thumbnail), mimetype="image/jpeg")).execute()
+            thumb = "set"
+        except Exception as e:  # noqa: BLE001
+            thumb = f"failed: {e}"
+    return {"id": vid, "url": f"https://www.youtube.com/watch?v={vid}", "thumbnail": thumb}
+
+
+def _upload(yt, video_path, meta, cfg):
+    yc = cfg["youtube"]
     body = {
         "snippet": {
             "title": str(meta["title"]).strip(),
@@ -57,7 +77,7 @@ def publish(video_path, meta, cfg):
         progress, response = request.next_chunk()
         if progress:
             print(f"  YouTube upload {int(progress.progress() * 100)}%")
-    return {"id": response["id"], "url": f"https://youtube.com/shorts/{response['id']}"}
+    return response["id"]
 
 
 def check_connection(cfg):

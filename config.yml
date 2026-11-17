@@ -4,6 +4,7 @@
 paused: false
 timezone: Asia/Manila
 slots: ["07:00", "10:00", "19:00"]   # one post per slot (owner: 3 Shorts a day + 1 long video, 2026-11-17)
+long_slots: ["08:00"]        # one long video per slot: own queue-long release + state/posted-long guard (post-long.yml)
 slot_window_minutes: 90     # a run within 90 min after a slot may post for that slot
 require_approval: false     # owner decision 2026-11-09: no review; queued videos post automatically (set true + list ids in state/approved.yml to gate posting)
 youtube:

@@ -13,10 +13,15 @@ import subprocess
 from pathlib import Path
 
 TAG = "queue"
-NOTES = "Render queue: <id>.mp4 + <id>.yml per short. Posted automatically, then removed."
+LONG_TAG = "queue-long"
+NOTES = {TAG: "Render queue: <id>.mp4 + <id>.yml per short. Posted automatically, then removed.",
+         LONG_TAG: "Long-video queue: <id>.mp4 + <id>.yml (+ <id>.jpg thumbnail) per long video. Posted automatically, then removed."}
 
 
 class ReleaseStore:
+    def __init__(self, tag=TAG):
+        self.tag = tag
+
     def _gh(self, *args, check=True):
         r = subprocess.run(["gh", *args], capture_output=True, text=True)
         if check and r.returncode:
@@ -24,13 +29,13 @@ class ReleaseStore:
         return r
 
     def ensure(self):
-        if self._gh("release", "view", TAG, check=False).returncode:
-            self._gh("release", "create", TAG, "--prerelease", "--title", TAG, "--notes", NOTES)
-            print("Created the 'queue' release")
+        if self._gh("release", "view", self.tag, check=False).returncode:
+            self._gh("release", "create", self.tag, "--prerelease", "--title", self.tag, "--notes", NOTES[self.tag])
+            print(f"Created the '{self.tag}' release")
 
     def names(self):
         """asset names; read-only: a missing release is an empty queue (it is never created here)"""
-        r = self._gh("release", "view", TAG, "--json", "assets", check=False)
+        r = self._gh("release", "view", self.tag, "--json", "assets", check=False)
         if r.returncode:
             if "not found" in r.stderr.lower():
                 return []
@@ -39,14 +44,14 @@ class ReleaseStore:
 
     def download(self, pattern, dest):
         Path(dest).mkdir(parents=True, exist_ok=True)
-        self._gh("release", "download", TAG, "--pattern", pattern, "--dir", str(dest), "--clobber")
+        self._gh("release", "download", self.tag, "--pattern", pattern, "--dir", str(dest), "--clobber")
 
     def delete(self, name):
-        self._gh("release", "delete-asset", TAG, name, "--yes")
+        self._gh("release", "delete-asset", self.tag, name, "--yes")
 
     def upload(self, path):
         self.ensure()
-        self._gh("release", "upload", TAG, str(path), "--clobber")
+        self._gh("release", "upload", self.tag, str(path), "--clobber")
 
 
 class LocalStore:
@@ -74,6 +79,9 @@ class LocalStore:
         shutil.copy(path, self.dir / Path(path).name)
 
 
-def get_store():
+def get_store(tag=TAG):
+    """the Shorts queue (tag "queue") or the long-video queue (tag "queue-long"; OJ_LOCAL_QUEUE/queue-long locally)"""
     local = os.environ.get("OJ_LOCAL_QUEUE")
-    return LocalStore(local) if local else ReleaseStore()
+    if local:
+        return LocalStore(local if tag == TAG else os.path.join(local, tag))
+    return ReleaseStore(tag)

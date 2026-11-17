@@ -1,0 +1,80 @@
+# Post the next queued LONG video to YouTube (python autopilot/publish.py youtube-long): the long-video twin of post.yml.
+#
+# The MAIN trigger is cron-job.org ("Orange Juice long post"), which dispatches this workflow at each long slot (config.yml `long_slots`, Asia/Manila) with dry_run=false.
+# The `schedule` below is only the backup, a few minutes later: publish.py posts at most once per long slot (state/posted-long),
+# so the two triggers can never double-post. Nobody starts this by hand: a manual run defaults to a dry run.
+# Times are UTC. When config.yml `long_slots` change, list a cron inside each slot's window here (tests/test_publish.py
+# checks it): 08:05 Manila = 00:05 UTC. Long videos live in the queue-long release (<id>.mp4 + .yml + .jpg thumbnail).
+#
+# Order matters: Post uploads and writes state/posted/<id>.json; Save progress commits and pushes it; only after the
+# save succeeds does Cleanup delete the video's assets from the queue release. If the push fails, the job fails, the
+# assets stay, and the video is still queued. KNOWN RESIDUAL: the backup run (or the next slot) checks out main, which
+# lacks the unsaved record, so it can upload that SAME video a second time (a duplicate upload, never a different
+# video). The slot guard and the posted check read state/posted only; there is no YouTube-side lookup.
+#
+# Security (public repo): this job runs no video code at all, only the repo's own autopilot/ Python from main. The
+# checkout does not persist credentials (tools/save_state.sh sets the push credential from GH_TOKEN, only in its step);
+# the YouTube secrets are visible to the posting step only; nothing user-influenced is interpolated into a script.
+name: post-long
+
+on:
+  schedule:
+    - cron: "5 0 * * *"         # backup: 08:05 Manila (cron-job.org fires at 08:00)
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (show what would be posted and the channel, upload nothing)"
+        type: boolean
+        default: true
+
+concurrency:
+  group: oj-post-long
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    environment: youtube   # the YouTube secrets live only in this main-only environment (writer branches cannot read them)
+    timeout-minutes: 60    # a ~600 MB upload
+    permissions:
+      contents: write           # commit state/posted, delete the posted assets from the queue release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main             # latest state, not the commit that was current when the trigger fired
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          # No cache: a job holding secrets or a write token never restores a cache (writer code could plant one).
+
+      - run: pip install -r requirements.txt
+
+      - name: Post to YouTube
+        env:
+          GH_TOKEN: ${{ github.token }}
+          YT_CLIENT_ID: ${{ secrets.YT_CLIENT_ID }}
+          YT_CLIENT_SECRET: ${{ secrets.YT_CLIENT_SECRET }}
+          YT_REFRESH_TOKEN: ${{ secrets.YT_REFRESH_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}        # empty on a scheduled run, which is a real run
+        run: |
+          args=()
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          python autopilot/publish.py youtube-long "${args[@]}"
+
+      - name: Save progress
+        if: ${{ always() && inputs.dry_run != true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          bash tools/save_state.sh "Post long: state $(date -u +%Y-%m-%dT%H:%MZ)"
+
+      # default success(): runs only when Post and Save progress both succeeded (a failed push must keep the assets)
+      - name: Cleanup posted assets
+        if: ${{ inputs.dry_run != true }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python autopilot/publish.py cleanup-long
