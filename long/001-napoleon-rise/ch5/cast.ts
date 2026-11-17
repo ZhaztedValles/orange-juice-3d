@@ -16,6 +16,8 @@ import {
 
 const LEAD = 2 / 30;
 const sw = (t: number, ts: number) => t >= ts - LEAD;
+/** shut the eyes for 4 frames around an expression swap at frame F, so the change reads as a blink, not a pop */
+const bk = (f: number, ...F: number[]) => (F.some((F0) => f >= F0 - 2 && f <= F0 + 1) ? { blink: 1 } : {});
 const clamp01 = (x: number) => Math.max(0, Math.min(1, x));
 const C = (i: number, okey: string, base: Char, o: Partial<Char["o"]>, expr?: Expr): Char => ({ i, okey, o: { ...base.o, ...o }, scale: base.scale, expr: expr ?? base.expr });
 
@@ -174,7 +176,7 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
   switch (id) {
     case 1: gulls(out, t, 4, [-30, 22, 40], 18); break;
     case 2: {
-      put(cam, out, t, NAP_GENERAL, NAP_RAIL[0], FL, NAP_RAIL[2], { fo: { expr: sw(t, 7.21) ? "stern" : "neutral", look: sw(t, 7.21) ? 0 : 1, prop: "tuck" } });
+      put(cam, out, t, NAP_GENERAL, NAP_RAIL[0], FL, NAP_RAIL[2], { fo: { expr: sw(t, 7.21) ? "stern" : "neutral", look: sw(t, 7.21) ? 0 : 1, prop: "tuck", ...bk(f, Math.ceil((7.21 - LEAD) * 30)) } });
       put(cam, out, t, frenchOfficer(0), 3.9, FL, 2.2, { fo: { expr: "smile", look: 1 } });
       put(cam, out, t, frenchOfficer(2), 8.3, FL, 2.0, { fo: { expr: "stern", look: -1 } });
       deckCrowd(cam, out, t);
@@ -185,17 +187,17 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
       const k = clamp01((f - 318) / 52), india = clamp01((f - 372) / 22);
       out.fx.push({ key: `map${q(k, 20)}|${q(india, 10)}`, cw: 800, ch: 520, draw: (p) => drawMap(p.g, q(k, 20), q(india, 10)), x: MAP_T[0], y: FL + 0.905, z: MAP_T[2], w: 1.7, h: 1.1, flat: true });
       const point = 0.25 + 0.12 * Math.sin(t * 2.2);
-      put(cam, out, t, NAP_GENERAL, MAP_T[0] + 0.15, FL, MAP_T[2] - 1.1, { fo: { expr: f > 370 ? "grin" : "stern", prop: ["sword", q(point, 20)] } });
-      put(cam, out, t, frenchOfficer(1), MAP_T[0] - 1.3, FL, MAP_T[2] - 0.75, { fo: { expr: f > 372 ? "shock" : "neutral", look: 1 } });
-      put(cam, out, t, frenchOfficer(0), MAP_T[0] + 1.35, FL, MAP_T[2] - 0.8, { fo: { expr: f > 376 ? "grin" : "smile", look: -1 } });
+      put(cam, out, t, NAP_GENERAL, MAP_T[0] + 0.15, FL, MAP_T[2] - 1.1, { fo: { expr: f > 370 ? "grin" : "stern", prop: ["sword", q(point, 20)], ...bk(f, 371) } });
+      put(cam, out, t, frenchOfficer(1), MAP_T[0] - 1.3, FL, MAP_T[2] - 0.75, { fo: { expr: f > 372 ? "shock" : "neutral", look: 1, ...bk(f, 373) } });
+      put(cam, out, t, frenchOfficer(0), MAP_T[0] + 1.35, FL, MAP_T[2] - 0.8, { fo: { expr: f > 376 ? "grin" : "smile", look: -1, ...bk(f, 377) } });
       put(cam, out, t, SOL[3], MAP_T[0] - 2.6, FL, MAP_T[2] - 2.4, { fo: { expr: "neutral" } });
       put(cam, out, t, SOL[0], MAP_T[0] + 2.8, FL, MAP_T[2] - 2.2, { fo: { expr: "smile" } });
       break;
     }
     case 4: {
-      put(cam, out, t, SAV[0], SCOPE[0], FL, SCOPE[2], { side: true, so: { expr: f > 455 ? "grin" : "neutral" } });
+      put(cam, out, t, SAV[0], SCOPE[0], FL, SCOPE[2], { side: true, so: { expr: f > 455 ? "grin" : "neutral", ...bk(f, 456) } });
       put(cam, out, t, SAV[1], 8.9, FL, -2.3, { fo: { expr: "smile", prop: "book", look: -1 } });
-      put(cam, out, t, SAV[2], 4.6, FL, -1.7, { fo: { expr: f > 430 ? "grin" : "smile", wave: q(0.5 + 0.5 * Math.sin(t * 3), 8) } });
+      put(cam, out, t, SAV[2], 4.6, FL, -1.7, { fo: { ...bk(f, 431), expr: f > 430 ? "grin" : "smile", wave: q(0.5 + 0.5 * Math.sin(t * 3), 8) } });
       put(cam, out, t, SAV[5], 11.4, FL, 2.4, { fo: { expr: "smile_closed", prop: "book" } });
       put(cam, out, t, SAV[3], 12.5, FL, -1.1, { fo: { expr: "grin", look: -1 } });
       // the wide: savants all over the forward deck, soldiers aft
@@ -209,13 +211,12 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
       for (let k = 0; k < 12; k++) {
         const x = -33 + k * 6 + hh(k, 1) * 2, z = -66.5 + hh(k, 2) * 2;
         if (Math.abs(x - 2) < 2.5) continue;
-        const rear = (t * 0.6 + hh(k, 3)) % 1 < 0.22;
-        horseCard(cam, out, t, x, sandY(x, z), z, { coat: [HORSE_COATS.grey, HORSE_COATS.bay, HORSE_COATS.black, HORSE_COATS.chestnut][k % 4], pose: rear ? "rear" : "stand",
-          cloth: ["#c23a3a", "#2f8a6a", "#e8b53e", "#6a46a8"][k % 4], clothTrim: "#e8b53e", rider: mamluk(k), riderOpts: { prop: ["sword", rear ? 1 : 0.6], expr: k % 2 ? "stern" : "grin" } }, k % 3 === 0);
+        horseCard(cam, out, t, x, sandY(x, z), z, { coat: [HORSE_COATS.grey, HORSE_COATS.bay, HORSE_COATS.black, HORSE_COATS.chestnut][k % 4], pose: "walk", phase: q(((t * 0.8 + hh(k, 3)) % 1 + 1) % 1, 12),
+          cloth: ["#c23a3a", "#2f8a6a", "#e8b53e", "#6a46a8"][k % 4], clothTrim: "#e8b53e", rider: mamluk(k), riderOpts: { prop: ["sword", 0.8], expr: k % 2 ? "stern" : "grin" } }, k % 3 === 0);
       }
-      const rear = f > 742 && f < 780;
+      const rear = f >= 736; // the pose changes exactly on the cut
       horseCard(cam, out, t, 2, sandY(2, -64.5), -64.5, { coat: HORSE_COATS.grey, pose: rear ? "rear" : "stand", cloth: "#c23a3a", clothTrim: "#e8b53e", rider: mamluk(0),
-        riderOpts: { prop: ["sword", f > 738 ? 1 : 0.5], expr: f > 738 ? "grin" : "stern" } }, true);
+        riderOpts: { prop: ["sword", rear ? 1 : 0.5], expr: rear ? "grin" : "stern" } }, true);
       break;
     }
     case 6: {
@@ -231,7 +232,7 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
     }
     case 7: {
       const B = 33.12, aerial = f < 961;
-      square(cam, out, t, 0, 0, (i) => (aerial ? (["stern", "neutral", "stern"] as Expr[])[i % 3] : sw(t, B) ? (["grin", "stern", "shock"] as Expr[])[i % 3] : (["stern", "nervous"] as Expr[])[i % 2]));
+      square(cam, out, t, 0, 0, (i) => (aerial ? (["stern", "neutral", "stern"] as Expr[])[i % 3] : f >= 996 ? (["grin", "stern", "shock"] as Expr[])[i % 3] : (["stern", "nervous"] as Expr[])[i % 2]));
       if (aerial) {
         square(cam, out, t, -78, -48, (i) => (["stern", "neutral"] as Expr[])[i % 2]);
         horseCard(cam, out, t, 0, 0, 0, { coat: HORSE_COATS.grey, pose: "stand", cloth: "#2c4790", clothTrim: "#e8b53e", rider: NAP_GENERAL, riderOpts: { expr: "stern" } });
@@ -241,18 +242,18 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
       } else {
         // riders sweep in from the right, rear up short of the bayonets ("broke"), wheel and gallop back out
         for (let k = 0; k < 6; k++) {
-          const t0 = 32.05 + k * 0.22, tb = 33.0 + k * 0.17, z = 20.5 + (k % 3) * 1.5;
+          const t0 = 32.05 + k * 0.22, tb = 996 / 30 - 0.001, z = 20.5 + (k % 3) * 1.5; // rear: frames 996-1002
           if (t < tb) rider(cam, out, t, k, 14 - (t - t0) * 9.5, z, -1);
-          else if (t < tb + 0.4) { const x = 14 - (tb - t0) * 9.5; horseCard(cam, out, t, x, 0, z, { coat: [HORSE_COATS.grey, HORSE_COATS.bay, HORSE_COATS.black][k % 3], pose: "rear", cloth: "#c23a3a", rider: mamluk(k), riderOpts: { prop: ["sword", 1], expr: "shock" } }, true); }
-          else rider(cam, out, t, k, 14 - (tb - t0) * 9.5 + (t - tb - 0.4) * 9, z + 3.5, 1, {}, 0.6);
+          else if (t < 1003 / 30 - 0.001) { const x = 14 - (tb - t0) * 9.5; horseCard(cam, out, t, x, 0, z, { coat: [HORSE_COATS.grey, HORSE_COATS.bay, HORSE_COATS.black][k % 3], pose: "rear", cloth: "#c23a3a", rider: mamluk(k), riderOpts: { prop: ["sword", 1], expr: "shock" } }, true); }
+          else rider(cam, out, t, k, 14 - (tb - t0) * 9.5 + (t - 1003 / 30) * 9, z + 3.5, 1, {}, 0.6);
         }
         volley(out, t, 32.2, muzzles(0, 0, 0, 1), 0.75); volley(out, t, 33.15, muzzles(0, 0, 0, 1), 0.75); volley(out, t, 33.25, muzzles(0, 0, 1, 0), 0.75);
       }
       break;
     }
     case 8: {
-      const rear = f > 1036 && f < 1086;
-      horseCard(cam, out, t, 0, 0, -2.5, { coat: HORSE_COATS.grey, pose: rear ? "rear" : "stand", cloth: "#2c4790", clothTrim: "#e8b53e", rider: NAP_GENERAL, riderOpts: { prop: ["sword", f > 1032 ? 1 : 0.4], expr: f > 1066 ? "grin" : "stern" } });
+      const rear = true; // whole shot: no mid-shot pose swap
+      horseCard(cam, out, t, 0, 0, -2.5, { coat: HORSE_COATS.grey, pose: rear ? "rear" : "stand", cloth: "#2c4790", clothTrim: "#e8b53e", rider: NAP_GENERAL, riderOpts: { prop: ["sword", 1], expr: f > 1066 ? "grin" : "stern", ...bk(f, 1067) } });
       [[-5.5, 1.5], [-3.8, 3.2], [-2.0, 1.2], [2.4, 1.4], [4.0, 3.0], [5.8, 1.6], [-6.8, 4.2], [7.0, 4.0], [-3.0, 5.0], [3.0, 5.0]].forEach(([x, z], i) =>
         put(cam, out, t, SOL[i % 6], x, 0, z, { fo: { expr: (["laugh", "grin", "laugh", "relief_open"] as Expr[])[i % 4], wave: i % 3 === 2 ? undefined : q(0.5 + 0.5 * Math.sin(t * 8 + i * 1.3), 8) } }));
       out.fx.push({ key: `flag${q(t % 1, 8)}`, cw: 300, ch: 420, draw: (p) => flagDraw(p, q(t % 1, 8)), x: -3.2, y: 2.7, z: 2.4, w: 1.5, h: 2.1 });
@@ -261,9 +262,9 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
     }
     case 9: gulls(out, t, 3, [-150, 14, -20], 12); break;
     case 10: {
-      const found = sw(t, 41.35);
-      put(cam, out, t, NELSON, NELSON_AT[0], FLV, NELSON_AT[2], { side: true, so: { expr: found ? "grin" : "stern", prop: ["sword", found ? 1 : 0.35] } });
-      put(cam, out, t, BRITISH_OFFICER, 38.4, FLV, 203.8, { fo: { expr: found ? "grin" : "neutral", look: -1 } });
+      const found = sw(t, 41.35), FOUND_F = Math.ceil((41.35 - LEAD) * 30);
+      put(cam, out, t, NELSON, NELSON_AT[0], FLV, NELSON_AT[2], { side: true, so: { expr: found ? "grin" : "stern", prop: ["sword", 0.35 + 0.65 * q(Math.min(1, Math.max(0, (f - FOUND_F + 2) / 8)), 8)], ...bk(f, FOUND_F) } });
+      put(cam, out, t, BRITISH_OFFICER, 38.4, FLV, 203.8, { fo: { expr: found ? "grin" : "neutral", look: -1, ...bk(f, FOUND_F) } });
       put(cam, out, t, britishSoldier(0), 42.3, FLV, 206.2, { fo: { expr: "stern" } });
       put(cam, out, t, britishSoldier(1), 37.4, FLV, 208.4, { fo: { expr: "neutral" } });
       put(cam, out, t, britishSoldier(2), 41.6, FLV, 212.5, { fo: { expr: "stern" } });
@@ -299,7 +300,7 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
     case 12: {
       const cu = f >= 1503;
       if (!cu) put(cam, out, t, NAP_GENERAL, NAP_SHORE[0], BEACH, NAP_SHORE[2], { side: true, so: { expr: "stern" } });
-      else put(cam, out, t, NAP_GENERAL, NAP_SHORE[0], BEACH, NAP_SHORE[2], { fo: { expr: f > 1516 ? "stern" : "neutral", look: -1 } });
+      else put(cam, out, t, NAP_GENERAL, NAP_SHORE[0], BEACH, NAP_SHORE[2], { fo: { expr: f > 1516 ? "stern" : "neutral", look: -1, ...bk(f, 1517) } });
       put(cam, out, t, frenchOfficer(0), 4.5, BEACH, -134.5, { fo: { expr: "nervous" } });
       put(cam, out, t, frenchOfficer(1), 2.8, BEACH, -133.2, { fo: { expr: "pained" } });
       for (let k = 0; k < 6; k++) for (const o of [0, 4]) smoke(out, t, Math.floor((t + k * 1.3 + o) / 8) * 8 - k * 1.3 - o, -250 + k * 95, 5, (k % 2) * 6, 12, 8, true);
@@ -331,8 +332,7 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
       if (!ins) {
         const spots: [number, number][] = found ? [[-1.9, 0.4], [-1.0, 1.7], [1.2, 1.9], [2.2, 0.5]] : [[-1.9, 0.6], [-0.5, 1.8], [1.4, 1.6], [2.3, -0.3]];
         spots.forEach(([dx, dz], i) => {
-          const dig = !found && (t * 1.6 + i * 0.3) % 1 < 0.5;
-          put(cam, out, t, i === 1 ? BARE[0] : SOL[(i * 3) % 6], DIG[0] + dx, 0, DIG[2] + dz, { fo: { expr: found ? (["shock", "grin", "shock", "relief_open"] as Expr[])[i] : "pained", tilt: dig ? (dx > 0 ? -14 : 14) : 0, look: found ? (dx > 0 ? -1 : 1) : 0 } });
+                    put(cam, out, t, i === 1 ? BARE[0] : SOL[(i * 3) % 6], DIG[0] + dx, 0, DIG[2] + dz, { fo: { expr: found ? (["shock", "grin", "shock", "relief_open"] as Expr[])[i] : "pained", tilt: found ? 0 : Math.round(14 * (0.5 - 0.5 * Math.cos(2 * Math.PI * ((t * 1.6 + i * 0.3) % 1)))) * (dx > 0 ? -1 : 1), look: found ? (dx > 0 ? -1 : 1) : 0 } });
           if (!found) {
             const u = ((t * 1.6 + i * 0.3) % 1);
             if (u > 0.45 && u < 0.95) { const k = (u - 0.45) / 0.5; out.fx.push({ key: "dirt", cw: 200, ch: 200, draw: dirtDraw, x: DIG[0] + dx * 0.5 - Math.sign(dx) * 1.6 * k, y: 0.6 + 1.6 * k - 2.2 * k * k, z: DIG[2] + dz * 0.4, w: 0.55, h: 0.55, rot: k * 3 }); }
@@ -343,11 +343,11 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
       break;
     }
     case 15: {
-      const read = sw(t, 65.78);
-      put(cam, out, t, SAV[0], STONE2[0] - 1.45, 0, STONE2[2] + 0.9, { fo: { expr: read ? "grin" : "shock", prop: "book", look: 1 } });
-      put(cam, out, t, SAV[1], STONE2[0] + 1.5, 0, STONE2[2] + 0.75, { fo: { expr: read ? "laugh" : "shock", wave: q(0.4 + 0.3 * Math.sin(t * 3), 8), look: -1 } });
-      put(cam, out, t, SAV[2], STONE2[0] - 1.25, 0, STONE2[2] - 1.0, { fo: { expr: read ? "smile_closed" : "shock" } });
-      put(cam, out, t, SAV[6], STONE2[0] + 1.4, 0, STONE2[2] - 1.2, { fo: { expr: read ? "grin" : "shock", prop: "book" } });
+      const read = sw(t, 65.78), RF = Math.ceil((65.78 - LEAD) * 30);
+      put(cam, out, t, SAV[0], STONE2[0] - 1.45, 0, STONE2[2] + 0.9, { fo: { expr: read ? "grin" : "shock", prop: "book", look: 1, ...bk(f, RF) } });
+      put(cam, out, t, SAV[1], STONE2[0] + 1.5, 0, STONE2[2] + 0.75, { fo: { ...bk(f, RF), expr: read ? "laugh" : "shock", wave: q(0.4 + 0.3 * Math.sin(t * 3), 8), look: -1 } });
+      put(cam, out, t, SAV[2], STONE2[0] - 1.25, 0, STONE2[2] - 1.0, { fo: { expr: read ? "smile_closed" : "shock", ...bk(f, RF) } });
+      put(cam, out, t, SAV[6], STONE2[0] + 1.4, 0, STONE2[2] - 1.2, { fo: { expr: read ? "grin" : "shock", prop: "book", ...bk(f, RF) } });
       put(cam, out, t, frenchOfficer(1), STONE2[0] + 3.0, 0, STONE2[2] - 0.6, { fo: { expr: "smile", look: -1 } });
       break;
     }
@@ -361,8 +361,8 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
         put(cam, out, t, SOL[1], CAMP[0] + 7.5, sandY(CAMP[0] + 7.5, CAMP[2] - 2), CAMP[2] - 2, { fo: { expr: "neutral" } });
       } else {
         const ex: Expr = f >= 2247 ? (f >= 2285 ? "grin" : "stern") : f >= 2184 ? "nervous" : f >= 2134 ? "shock" : "neutral";
-        put(cam, out, t, NAP_GENERAL, NAP_CAMP[0], sandY(NAP_CAMP[0], NAP_CAMP[2]), NAP_CAMP[2], { fo: { expr: ex, prop: f >= 2247 ? "tuck" : "book" } });
-        if (f < 2247) put(cam, out, t, frenchOfficer(0), CAMP[0] - 1.8, sandY(CAMP[0] - 1.8, CAMP[2] + 1.4), CAMP[2] + 1.4, { fo: { expr: f >= 2134 ? "nervous" : "neutral", look: 1 } });
+        put(cam, out, t, NAP_GENERAL, NAP_CAMP[0], sandY(NAP_CAMP[0], NAP_CAMP[2]), NAP_CAMP[2], { fo: { expr: ex, prop: f >= 2247 ? "tuck" : "book", ...bk(f, 2134, 2184, 2285) } });
+        if (f < 2247) put(cam, out, t, frenchOfficer(0), CAMP[0] - 1.8, sandY(CAMP[0] - 1.8, CAMP[2] + 1.4), CAMP[2] + 1.4, { fo: { expr: f >= 2134 ? "nervous" : "neutral", look: 1, ...bk(f, 2134) } });
       }
       break;
     }
@@ -389,9 +389,9 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
     }
     case 19: {
       const [rx, , rz] = ROOM;
-      put(cam, out, t, NAP_GENERAL, rx, 0, rz - 1.15, { fo: { expr: f > 2627 ? "grin" : "stern", look: 0 } });
+      put(cam, out, t, NAP_GENERAL, rx, 0, rz - 1.15, { fo: { expr: f > 2627 ? "grin" : "stern", look: 0, ...bk(f, 2628) } });
       put(cam, out, t, LUCIEN, rx - 1.2, 0, rz - 0.85, { fo: { expr: "smile_closed", tilt: 6, look: 1 } });
-      put(cam, out, t, SIEYES, rx + 1.2, 0, rz - 0.85, { fo: { expr: f > 2636 ? "grin" : "smile", tilt: -6, look: -1 } });
+      put(cam, out, t, SIEYES, rx + 1.2, 0, rz - 0.85, { fo: { expr: f > 2636 ? "grin" : "smile", tilt: -6, look: -1, ...bk(f, 2637) } });
       out.fx.push({ key: "papers", cw: 400, ch: 300, draw: papersDraw, x: rx - 0.3, y: 0.865, z: rz + 0.15, w: 1.1, h: 0.8, flat: true, rot: 0.1 });
       out.fx.push({ key: "candle", cw: 120, ch: 320, draw: candleDraw, x: rx + 0.55, y: 0.86 + 0.13, z: rz + 0.3, w: 0.1, h: 0.27 });
       const ph = q((t * 2.3) % 1, 8);
@@ -413,7 +413,7 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
       }
       if (id === 20) {
         const cu = f >= 2771;
-        if (!cu) put(cam, out, t, NAP_GENERAL, hx - 16, 0, hz - 0.6, { side: true, so: { expr: f > 2760 ? "nervous" : "stern" } });
+        if (!cu) put(cam, out, t, NAP_GENERAL, hx - 16, 0, hz - 0.6, { side: true, so: { expr: f > 2760 ? "nervous" : "stern", ...bk(f, 2761) } });
         else {
           put(cam, out, t, NAP_GENERAL, hx - 16, 0, hz - 0.6, { fo: { expr: "nervous", look: 1, tilt: -4 } });
           [[-13.9, -1.8], [-13.1, -2.9], [-12.4, -0.6]].forEach(([dx, dz], i) => put(cam, out, t, LAW[(i * 5) % 8], hx + dx, 0, hz + dz, { fo: { expr: i % 2 ? "shock" : "stern", wave: q(0.5 + 0.5 * Math.sin(t * 10 + i), 8), look: -1 } }));
@@ -421,7 +421,7 @@ export const stage = (id: number, t: number, cam: CamInfo): Stage => {
         put(cam, out, t, GRENADIER[0], hx - 17.4, 0, hz - 2.4, { fo: { expr: "nervous" } });
         put(cam, out, t, GRENADIER[1], hx - 17.6, 0, hz + 1.6, { fo: { expr: "stern" } });
       } else if (!clear) {
-        put(cam, out, t, LUCIEN, hx - 20, TRIB, hz - 4, { fo: { expr: f > 2850 ? "grin" : "stern", prop: ["sword", q(clamp01((f - 2826) / 12), 12)] } });
+        put(cam, out, t, LUCIEN, hx - 20, TRIB, hz - 4, { fo: { ...bk(f, 2851), expr: f > 2850 ? "grin" : "stern", prop: ["sword", q(clamp01((f - 2826) / 12), 12)] } });
         put(cam, out, t, NAP_GENERAL, hx - 20.6, TRIB, hz - 1.6, { fo: { expr: "relief", look: -1 } });
         [[-16.6, -6.2], [-15.9, -4.8], [-16.4, -3.2], [-15.6, -7.4], [-14.9, -5.6]].forEach(([dx, dz], i) =>
           put(cam, out, t, i < 2 ? GRENADIER[i] : SOL[i % 6], hx + dx, 0, hz + dz, { fo: { expr: (["grin", "stern", "grin", "laugh", "stern"] as Expr[])[i] } }));

@@ -102,7 +102,7 @@ export const PATROL_Z = 200;
 /** Napoleon riding through the cheering street (shot 18) */
 export const rideX = (t: number) => -7 + 1.6 * (t - 84);
 /** the courier galloping into the camp (shot 16), stopping at 70.1 s */
-export const COURIER_STOP = 70.1;
+export const COURIER_STOP = 70.75; // past the cut at 2117: the courier never pulls up on screen (no gallop->stand swap)
 export const courierX = (t: number) => CAMP[0] + 4.2 + Math.max(0, COURIER_STOP - t) * 7.5;
 /** L'Orient explodes */
 export const BOOM = 46.1;

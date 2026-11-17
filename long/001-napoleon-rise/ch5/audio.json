@@ -452,12 +452,12 @@
   {
    "t": 68.6,
    "kind": "rattle",
-   "dur": 1.6,
+   "dur": 2.0,
    "gain_db": -9,
    "pan": 0.5
   },
   {
-   "t": 70.1,
+   "t": 70.6,
    "kind": "boot",
    "gain_db": -8,
    "pan": 0.3
