@@ -16,7 +16,7 @@ on:
         required: true
 
 concurrency:
-  group: oj-render-long
+  group: oj-render-long-${{ inputs.chapter }}  # one per chapter: queued renders of other chapters must not cancel each other
   cancel-in-progress: false
 
 permissions: {}
