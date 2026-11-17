@@ -27,6 +27,8 @@ import V011, { FRAMES as F011 } from "../videos/011-diamond-field-hoax/Video";
 import W011 from "../videos/011-diamond-field-hoax/words.json";
 import V012, { FRAMES as F012 } from "../videos/012-suez-lighthouse-liberty/Video";
 import W012 from "../videos/012-suez-lighthouse-liberty/words.json";
+import V013, { FRAMES as F013 } from "../videos/013-weston-walk-lincoln/Video";
+import W013 from "../videos/013-weston-walk-lincoln/words.json";
 
 export type VideoEntry = { id: string; Component: React.FC; frames: number; words: Word[] | null };
 
@@ -44,6 +46,7 @@ export const VIDEOS: VideoEntry[] = [
   { id: "010-tally-stick-fire", Component: V010, frames: F010, words: W010 as Word[] },
   { id: "011-diamond-field-hoax", Component: V011, frames: F011, words: W011 as Word[] },
   { id: "012-suez-lighthouse-liberty", Component: V012, frames: F012, words: W012 as Word[] },
+  { id: "013-weston-walk-lincoln", Component: V013, frames: F013, words: W013 as Word[] },
 ];
 
 import L0, { FRAMES as LF0 } from "../long/000-sample/ch1/Video";
