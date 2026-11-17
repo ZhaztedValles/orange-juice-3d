@@ -75,7 +75,7 @@ These tokens are forbidden anywhere in that code, comments and string literals i
 
 ### Other rules
 
-- Output 1080x1920, 30 fps. Every pixel-sized parameter is specified at 1080x1920 and scales with the output height.
+- Output 1080x1920, 30 fps. Every pixel-sized parameter is specified at 1080x1920 and scales with `pxScale` = min(width, height) / 1080 (the output height / 1920 for any 9:16 size).
 - Film grain stays off.
 - Kenney CC0 models are loaded with `loadKenney(names)` / `staticFile("kenney/<name>.glb")`; they are fetched into
   `public/kenney/` by `scripts/fetch-kenney.mjs` and never committed.
@@ -83,6 +83,8 @@ These tokens are forbidden anywhere in that code, comments and string literals i
   takes it as a parameter (default: the bridge template's value).
 
 ## Long chapters (milestone 1)
+
+The nightly Shorts writer never creates or edits anything under `long/` (Accept rejects it); this section is for the long-video pipeline only.
 
 A long video is a folder `long/<NNN-slug>/` (same `NNN-slug` pattern as `videos/`) of chapter folders `ch<N>/`. A
 chapter holds the same code and data files as a Short (`Video.tsx` with `export const FRAMES = <int>;`, its own
@@ -220,7 +222,7 @@ Captions are not a video's job: `src/Root.tsx` wraps every video in `WithCaption
 
 ### `src/engine/cardshade.ts`
 - `GRAD_K`, `GRAD_KB`, `TINT_K`: card side-gradient and tint strengths.
-- `CARD_K`: card shader uniforms (`uPx` = render height / 1920, set per draw).
+- `CARD_K`: card shader uniforms (`uPx` = pxScale(width, height), set per draw).
 - `cardShade(material)`: lit flat character card material (tint, bright floor, gradient toward the sun).
 - `blobMaterial(map)`: multiply material for contact blobs.
 
