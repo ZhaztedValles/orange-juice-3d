@@ -1,0 +1,313 @@
+{
+ "music": [
+  {
+   "from": 0,
+   "to": 10.6,
+   "mood": "warm"
+  },
+  {
+   "from": 10.6,
+   "to": 24.2,
+   "mood": "tension"
+  },
+  {
+   "from": 24.2,
+   "to": 34.3,
+   "mood": "warm"
+  },
+  {
+   "from": 34.3,
+   "to": 47.6,
+   "mood": "playful"
+  },
+  {
+   "from": 47.6,
+   "to": 53.0,
+   "mood": "warm"
+  },
+  {
+   "from": 53.0,
+   "to": 66.4,
+   "mood": "march"
+  },
+  {
+   "from": 66.4,
+   "to": 83.0,
+   "mood": "sad"
+  },
+  {
+   "from": 83.0,
+   "to": 88.7,
+   "mood": "march"
+  },
+  {
+   "from": 88.7,
+   "to": 98.4,
+   "mood": "sad"
+  },
+  {
+   "from": 98.4,
+   "to": 102.9667,
+   "mood": "tension"
+  }
+ ],
+ "key": "D",
+ "bpm": 104,
+ "sfx": [
+  {
+   "t": 4.55,
+   "kind": "whoosh",
+   "dur": 0.5,
+   "gain_db": -9
+  },
+  {
+   "t": 4.6,
+   "kind": "breeze",
+   "dur": 26.0,
+   "gain_db": -12
+  },
+  {
+   "t": 4.75,
+   "kind": "stroll_step",
+   "gain_db": -15,
+   "pan": -0.3
+  },
+  {
+   "t": 5.31,
+   "kind": "stroll_step",
+   "gain_db": -15,
+   "pan": -0.22
+  },
+  {
+   "t": 5.87,
+   "kind": "stroll_step",
+   "gain_db": -15,
+   "pan": -0.14
+  },
+  {
+   "t": 6.43,
+   "kind": "stroll_step",
+   "gain_db": -15,
+   "pan": -0.06
+  },
+  {
+   "t": 6.99,
+   "kind": "stroll_step",
+   "gain_db": -15,
+   "pan": 0.02
+  },
+  {
+   "t": 7.55,
+   "kind": "stroll_step",
+   "gain_db": -15,
+   "pan": 0.1
+  },
+  {
+   "t": 8.11,
+   "kind": "stroll_step",
+   "gain_db": -15,
+   "pan": 0.18
+  },
+  {
+   "t": 34.3,
+   "kind": "whoosh",
+   "dur": 0.5,
+   "gain_db": -9
+  },
+  {
+   "t": 34.4,
+   "kind": "breeze",
+   "dur": 13.2,
+   "gain_db": -10
+  },
+  {
+   "t": 45.533,
+   "kind": "push_thump",
+   "gain_db": -9,
+   "pan": 0.0
+  },
+  {
+   "t": 45.933,
+   "kind": "push_thump",
+   "gain_db": -9,
+   "pan": 0.0
+  },
+  {
+   "t": 46.467,
+   "kind": "push_thump",
+   "gain_db": -9,
+   "pan": 0.0
+  },
+  {
+   "t": 46.733,
+   "kind": "push_thump",
+   "gain_db": -9,
+   "pan": 0.0
+  },
+  {
+   "t": 46.733,
+   "kind": "oof",
+   "gain_db": -9,
+   "pan": -0.2
+  },
+  {
+   "t": 47.0,
+   "kind": "push_thump",
+   "gain_db": -9,
+   "pan": 0.0
+  },
+  {
+   "t": 47.3,
+   "kind": "push_thump",
+   "gain_db": -9,
+   "pan": 0.0
+  },
+  {
+   "t": 47.567,
+   "kind": "push_thump",
+   "gain_db": -9,
+   "pan": 0.0
+  },
+  {
+   "t": 47.65,
+   "kind": "whoosh",
+   "dur": 0.5,
+   "gain_db": -9
+  },
+  {
+   "t": 53.0,
+   "kind": "whoosh",
+   "dur": 0.5,
+   "gain_db": -9
+  },
+  {
+   "t": 53.0,
+   "kind": "bird_chirps",
+   "dur": 13.3,
+   "gain_db": -17
+  },
+  {
+   "t": 59.967,
+   "kind": "push_thump",
+   "gain_db": 0
+  },
+  {
+   "t": 59.967,
+   "kind": "wood_crack",
+   "gain_db": -7
+  },
+  {
+   "t": 59.987,
+   "kind": "whoosh",
+   "dur": 0.6,
+   "gain_db": -10
+  },
+  {
+   "t": 64.6,
+   "kind": "push_thump",
+   "gain_db": -2
+  },
+  {
+   "t": 64.6,
+   "kind": "wood_crack",
+   "gain_db": -7
+  },
+  {
+   "t": 64.62,
+   "kind": "whoosh",
+   "dur": 0.6,
+   "gain_db": -10
+  },
+  {
+   "t": 65.15,
+   "kind": "wood_crack",
+   "gain_db": -4,
+   "pan": -0.1
+  },
+  {
+   "t": 66.45,
+   "kind": "whoosh",
+   "dur": 0.5,
+   "gain_db": -9
+  },
+  {
+   "t": 66.7,
+   "kind": "creak",
+   "dur": 0.8,
+   "gain_db": -15
+  },
+  {
+   "t": 73.2,
+   "kind": "crickets",
+   "dur": 9.8,
+   "gain_db": -19
+  },
+  {
+   "t": 83.0,
+   "kind": "whoosh",
+   "dur": 0.5,
+   "gain_db": -9
+  },
+  {
+   "t": 86.45,
+   "kind": "applause",
+   "dur": 2.4,
+   "gain_db": -11
+  },
+  {
+   "t": 88.9,
+   "kind": "clink",
+   "dur": 0.8,
+   "gain_db": -13,
+   "pan": -0.3
+  },
+  {
+   "t": 100.35,
+   "kind": "push_thump",
+   "gain_db": -2
+  },
+  {
+   "t": 100.35,
+   "kind": "wood_crack",
+   "gain_db": -8
+  },
+  {
+   "t": 100.4,
+   "kind": "applause",
+   "dur": 2.5,
+   "gain_db": -7
+  },
+  {
+   "t": 100.4,
+   "kind": "whoa",
+   "dur": 2.2,
+   "gain_db": -9
+  },
+  {
+   "t": 100.4,
+   "kind": "flag_flutter",
+   "dur": 2.5,
+   "gain_db": -12
+  },
+  {
+   "t": 100.5,
+   "kind": "column_stomp",
+   "gain_db": -12
+  },
+  {
+   "t": 101.0,
+   "kind": "column_stomp",
+   "gain_db": -12
+  },
+  {
+   "t": 101.5,
+   "kind": "column_stomp",
+   "gain_db": -12
+  },
+  {
+   "t": 102.0,
+   "kind": "column_stomp",
+   "gain_db": -12
+  }
+ ]
+}
