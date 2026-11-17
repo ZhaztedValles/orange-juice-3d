@@ -20,7 +20,7 @@ name: post
 on:
   schedule:
     - cron: "5 11 * * *"        # backup: 19:05 Manila (cron-job.org fires at 19:00)
-    - cron: "5 23,2,5,8,14 * * *"   # backup: 07:05, 10:05, 13:05, 16:05, 22:05 Manila
+    - cron: "5 23,2 * * *"       # backup: 07:05, 10:05 Manila
   workflow_dispatch:
     inputs:
       dry_run:
