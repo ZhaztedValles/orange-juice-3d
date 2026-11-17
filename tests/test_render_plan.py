@@ -189,3 +189,55 @@ def test_plan_fails_without_source_sha(cli, capsys, monkeypatch):
         render_plan.plan()
     assert render_plan.main(["--video", "001-alpha"]) == 1
     assert "no last-commit sha" in capsys.readouterr().err
+
+
+# --- long chapters ----------------------------------------------------------------------------------
+
+@pytest.fixture
+def long_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(render_plan, "ROOT", tmp_path)
+    ch = tmp_path / "long" / "001-x" / "ch1"
+    ch.mkdir(parents=True)
+    (ch / "Video.tsx").write_text("export const FRAMES = 2700;\n", encoding="utf-8")
+    (ch / "chapter.json").write_text('{"n": 1, "title": "One"}', encoding="utf-8")
+    return ch
+
+
+def test_long_chapter_plan(long_root, capsys):
+    assert render_plan.main(["--long-chapter", "long/001-x/ch1"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["chapter"] == "001-x-ch1" and out["composition"] == "ojl-001-x-ch1" and out["frames"] == 2700
+    inc = out["matrix"]["include"]
+    assert len(inc) == 16 and inc[0]["from"] == 0 and inc[-1]["to"] == 2699
+    assert all(a["to"] + 1 == b["from"] for a, b in zip(inc, inc[1:]))
+
+
+def test_long_chapter_plan_rejects_a_folder_without_chapter_json(long_root, capsys):
+    (long_root / "chapter.json").unlink()
+    assert render_plan.main(["--long-chapter", "long/001-x/ch1"]) == 1
+    assert "chapter.json" in capsys.readouterr().err
+
+
+def test_long_chapter_plan_rejects_a_folder_without_video_tsx(long_root, capsys):
+    (long_root / "Video.tsx").unlink()
+    assert render_plan.main(["--long-chapter", "long/001-x/ch1"]) == 1
+    assert "Video.tsx" in capsys.readouterr().err
+
+
+def test_long_chapter_plan_rejects_bad_paths(long_root):
+    for bad in ("long/001-x/ch1/..", "../long/001-x/ch1", "videos/001-x/ch1", "long/001-x/ch"):
+        with pytest.raises(SystemExit):
+            render_plan.main(["--long-chapter", bad])
+
+
+def test_check_pieces_uses_the_given_size(tmp_path, monkeypatch):
+    monkeypatch.setattr(render_plan, "probe_piece", lambda path: probe(frames=1))
+    for c in render_plan.chunks(16):                                             # 16 one-frame pieces
+        (tmp_path / f"piece_{c['idx']}.mp4").write_bytes(b"")
+    base = ["--check-pieces", str(tmp_path), "--frames", "16"]
+    assert render_plan.main(base) == 0                                           # 1080x1920 piece, Shorts defaults
+    assert render_plan.main(base + ["--width", "1920", "--height", "1080"]) == 1
+    wide = [{"codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080, "nb_read_frames": "1"}]
+    monkeypatch.setattr(render_plan, "probe_piece", lambda path: probe(streams=wide))
+    assert render_plan.main(base + ["--width", "1920", "--height", "1080"]) == 0
+    assert render_plan.main(base) == 1

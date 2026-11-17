@@ -1,0 +1,261 @@
+# Render one long 16:9 chapter (long/<NNN-slug>/ch<N>, composition ojl-<NNN-slug>-ch<N>, 1920x1080) for review.
+# Same shape as render.yml: plan -> 16 parallel chunk renders -> finish (check the pieces, join, mix, mux, QA, gate).
+# Dispatch only. It never queues, posts, writes state, commits, or re-dispatches: the result is the `long-<chapter id>`
+# artifact (final.mp4, qa.json, qa/report.md) and a pass / fail gate verdict in the log and the job summary.
+#
+# Security (public repo): the render jobs execute writer-authored Video.tsx, so every job gets `contents: read` only, no
+# secrets, no persisted git credentials, and only plan (which runs no video code) saves caches. The chapter input is
+# validated against a strict pattern before anything uses it and only ever reaches scripts through `env:`.
+name: render-long
+
+on:
+  workflow_dispatch:
+    inputs:
+      chapter:
+        description: "Long chapter to render, <NNN-slug>/ch<N> (e.g. 000-sample/ch1)"
+        required: true
+
+concurrency:
+  group: oj-render-long
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      chapter: ${{ steps.plan.outputs.chapter }}
+      composition: ${{ steps.plan.outputs.composition }}
+      frames: ${{ steps.plan.outputs.frames }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    env:
+      INPUT_CHAPTER: ${{ inputs.chapter }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Plan
+        id: plan
+        run: |
+          if ! [[ "$INPUT_CHAPTER" =~ ^[0-9]{3}-[a-z0-9-]+/ch[0-9]+$ ]]; then
+            echo "::error::chapter must look like 000-sample/ch1 (<NNN-slug>/ch<N>)"
+            exit 1
+          fi
+          plan=$(python tools/render_plan.py --long-chapter "long/$INPUT_CHAPTER")
+          echo "$plan"
+          {
+            echo "chapter=$(jq -r '.chapter' <<< "$plan")"
+            echo "composition=$(jq -r '.composition' <<< "$plan")"
+            echo "frames=$(jq -r '.frames' <<< "$plan")"
+            echo "matrix=$(jq -c '.matrix' <<< "$plan")"
+          } >> "$GITHUB_OUTPUT"
+
+      # Warm the caches here, where no video code runs, so the render jobs only ever restore them
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # node_modules includes Remotion's downloaded headless shell (node_modules/.remotion), so one cache covers both
+      - name: Cache node_modules + Remotion browser
+        id: nm
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: nm-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+          lookup-only: true
+
+      - name: Install
+        if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci && npx remotion browser ensure
+
+      - name: Cache Kenney models
+        id: kenney
+        uses: actions/cache@v4
+        with:
+          path: public/kenney
+          key: kenney-${{ hashFiles('scripts/fetch-kenney.mjs') }}
+          lookup-only: true
+
+      - name: Fetch Kenney models (CC0, never committed)
+        if: steps.kenney.outputs.cache-hit != 'true'
+        run: node scripts/fetch-kenney.mjs
+
+  render:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    env:
+      TMPDIR: ${{ github.workspace }}/../remotion-tmp
+      COMPOSITION: ${{ needs.plan.outputs.composition }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Restore node_modules + Remotion browser
+        id: nm
+        uses: actions/cache/restore@v4
+        with:
+          path: node_modules
+          key: nm-${{ runner.os }}-node22-${{ hashFiles('package-lock.json') }}
+
+      - name: Install (only when the cache is missing)
+        if: steps.nm.outputs.cache-hit != 'true'
+        run: npm ci && npx remotion browser ensure
+
+      - name: Restore Kenney models
+        uses: actions/cache/restore@v4
+        with:
+          path: public/kenney
+          key: kenney-${{ hashFiles('scripts/fetch-kenney.mjs') }}
+
+      - name: Fetch Kenney models (CC0, no-op when restored)
+        run: node scripts/fetch-kenney.mjs
+
+      - run: npm run gen
+
+      - name: Render chunk ${{ matrix.idx }} (${{ matrix.from }}-${{ matrix.to }})
+        run: |
+          mkdir -p "$TMPDIR" pieces
+          # identical codec / fps / size / pixel format for every chunk so the pieces join with -c copy
+          set +e
+          npx remotion render src/index.ts "$COMPOSITION" "pieces/piece_${{ matrix.idx }}.mp4" \
+            --frames=${{ matrix.from }}-${{ matrix.to }} --gl=swangle --concurrency=1 \
+            --codec=h264 --crf=16 --pixel-format=yuv420p --muted --timeout=240000 2>&1 \
+            | tee render.log | stdbuf -oL tr '\r' '\n' | grep --line-buffered -E "Rendered [0-9]*0/|rror"
+          rc=${PIPESTATUS[0]}
+          set -e
+          if [ "$rc" != 0 ]; then tail -c 4000 render.log; exit "$rc"; fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: piece-${{ matrix.idx }}
+          path: pieces/piece_${{ matrix.idx }}.mp4
+          retention-days: 3
+          if-no-files-found: error
+
+  finish:
+    needs: [plan, render]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      CHAPTER: ${{ needs.plan.outputs.chapter }}
+      FRAMES: ${{ needs.plan.outputs.frames }}
+      INPUT_CHAPTER: ${{ inputs.chapter }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Install ffmpeg
+        run: command -v ffmpeg >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null; }
+
+      - name: Validate the chapter input
+        run: |
+          if ! [[ "$INPUT_CHAPTER" =~ ^[0-9]{3}-[a-z0-9-]+/ch[0-9]+$ ]]; then
+            echo "::error::chapter must look like 000-sample/ch1 (<NNN-slug>/ch<N>)"
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: piece-*
+          path: pieces
+          merge-multiple: true
+
+      - name: Check the pieces, join losslessly, check the frame count
+        id: join
+        run: |
+          # every planned piece present, nothing else, each an mp4 with one h264 1920x1080 stream of its chunk's frames
+          python tools/render_plan.py --check-pieces pieces --frames "$FRAMES" --width 1920 --height 1080 > list.txt
+          cat list.txt
+          ffmpeg -v error -y -f concat -safe 0 -i list.txt -c copy -movflags +faststart joined.mp4
+          got=$(ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames -of csv=p=0 joined.mp4)
+          echo "joined.mp4: $got frames (want $FRAMES)"
+          if [ "$got" != "$FRAMES" ]; then echo "::error::joined.mp4 has $got frames, want $FRAMES"; exit 1; fi
+
+      - name: Mix
+        id: mix
+        run: |
+          if ! python audio/build_mix.py "long/$INPUT_CHAPTER" "out/$CHAPTER" 2> mix_err.txt; then cat mix_err.txt; exit 1; fi
+          cat mix_err.txt
+
+      - name: Mux
+        id: mux
+        run: |
+          ffmpeg -v error -y -i joined.mp4 -i "out/$CHAPTER/mix.wav" -map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -b:a 192k -ar 48000 \
+            -shortest -movflags +faststart final.mp4
+
+      - name: QA
+        id: qa
+        run: |
+          python scripts/short_qa.py final.mp4 qa "long/$INPUT_CHAPTER/shots.json" --json qa.json
+          cat qa.json
+
+      # Reported, never acted on: the artifact below is uploaded either way and the run goes red at the end on a fail
+      - name: Gate
+        id: gate
+        run: |
+          set +e
+          python tools/qa_gate.py qa.json "$FRAMES" --width 1920 --height 1080 > reasons.txt
+          rc=$?
+          set -e
+          cat reasons.txt
+          case "$rc" in
+            0) echo "result=pass" >> "$GITHUB_OUTPUT" ;;
+            1) echo "result=fail" >> "$GITHUB_OUTPUT" ;;
+            *) exit "$rc" ;;
+          esac
+          {
+            echo "### $CHAPTER gate"
+            echo '```'
+            cat reasons.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: long-${{ needs.plan.outputs.chapter }}
+          path: |
+            final.mp4
+            qa.json
+            qa/report.md
+          retention-days: 7
+          if-no-files-found: warn
+
+      - name: Fail the run when the gate failed
+        if: always() && steps.gate.outputs.result == 'fail'
+        run: |
+          while read -r r; do
+            if [ -n "$r" ]; then echo "::error::$CHAPTER gate: $r"; fi
+          done < reasons.txt
+          exit 1

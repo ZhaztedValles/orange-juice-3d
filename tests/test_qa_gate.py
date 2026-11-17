@@ -84,3 +84,14 @@ def test_frozen():
     # [start, end] are frame numbers, both inclusive: [100, 145] is 46 identical frames
     assert fails(good(frozen=[[100, 145]]), "frozen")
     assert not fails(good(frozen=[[100, 144]]), "frozen")
+
+
+def test_qa_gate_widescreen(tmp_path):
+    wide = good(width=1920, height=1080)
+    assert qa_gate.verdict(wide, FRAMES, width=1920, height=1080) == []
+    assert fails(wide, "width") and fails(wide, "height")           # defaults stay 1080x1920
+    assert qa_gate.verdict(good(), FRAMES, width=1920, height=1080)
+    p = tmp_path / "qa.json"
+    p.write_text(__import__("json").dumps(wide), encoding="utf-8")
+    assert qa_gate.main([str(p), str(FRAMES), "--width", "1920", "--height", "1080"]) == 0
+    assert qa_gate.main([str(p), str(FRAMES)]) == 1

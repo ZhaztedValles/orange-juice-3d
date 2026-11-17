@@ -1,6 +1,6 @@
 """Pass / fail gate on a rendered short, from scripts/short_qa.py's --json numbers.
 
-Usage: python tools/qa_gate.py qa.json FRAMES
+Usage: python tools/qa_gate.py qa.json FRAMES [--width W --height H]   (default 1080x1920; long chapters 1920x1080)
 Prints `pass`, or one fail reason per line and exits 1.
 Planned events (flashes, crossfades, deliberate holds) belong in the video's shots.json `planned` / `flash` / `xfade`,
 never in looser limits here.
@@ -8,6 +8,7 @@ never in looser limits here.
 Frozen runs come as [start, end] frame numbers, both inclusive: a run is end - start + 1 identical frames,
 and a run longer than 45 frames (1.5 s) fails. short_qa drops runs that lie entirely inside `planned` ranges.
 """
+import argparse
 import json
 import sys
 
@@ -22,13 +23,13 @@ def _num(x):
     return isinstance(x, (int, float)) and not isinstance(x, bool)
 
 
-def verdict(qa, frames):
+def verdict(qa, frames, width=WIDTH, height=HEIGHT):
     """fail reasons for short_qa's JSON `qa` against the planned frame count; empty means pass"""
     out = []
-    if qa.get("width") != WIDTH:
-        out.append(f"width {qa.get('width')} (want {WIDTH})")
-    if qa.get("height") != HEIGHT:
-        out.append(f"height {qa.get('height')} (want {HEIGHT})")
+    if qa.get("width") != width:
+        out.append(f"width {qa.get('width')} (want {width})")
+    if qa.get("height") != height:
+        out.append(f"height {qa.get('height')} (want {height})")
     fps = qa.get("fps")
     if not _num(fps) or abs(fps - FPS) > 1e-6:
         out.append(f"fps {fps} (want {FPS})")
@@ -60,12 +61,18 @@ def verdict(qa, frames):
 
 
 def main(argv):
-    if len(argv) != 2:
-        print("usage: python tools/qa_gate.py qa.json FRAMES", file=sys.stderr)
+    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("qa")
+    ap.add_argument("frames", type=int)
+    ap.add_argument("--width", type=int, default=WIDTH)
+    ap.add_argument("--height", type=int, default=HEIGHT)
+    try:
+        a = ap.parse_args(argv)
+    except SystemExit:
         return 2
-    with open(argv[0], encoding="utf-8") as f:
+    with open(a.qa, encoding="utf-8") as f:
         qa = json.load(f)
-    reasons = verdict(qa, int(argv[1]))
+    reasons = verdict(qa, a.frames, a.width, a.height)
     print("\n".join(reasons) if reasons else "pass")
     return 1 if reasons else 0
 

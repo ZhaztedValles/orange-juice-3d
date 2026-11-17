@@ -7,14 +7,18 @@ Usage:
       Without --video it picks the lowest eligible id (see next_video); with --video it skips eligibility (templates,
       re-renders) but the folder must still pass tools/video_check.py (exit 1 with the problems otherwise).
       `source` is the last commit touching videos/<id>; the render state records it (tools/render_state.py).
-  python tools/render_plan.py --check-pieces DIR --frames N
-      checks DIR/piece_<idx>.mp4 against chunks(N) (mp4, one h264 video stream, 1080x1920, the chunk's frame count,
-      no missing or extra pieces); prints an ffmpeg concat list on success, the problems on stderr and exit 1 otherwise.
+  python tools/render_plan.py --check-pieces DIR --frames N [--width W --height H]
+      checks DIR/piece_<idx>.mp4 against chunks(N) (mp4, one h264 video stream, WxH (default 1080x1920), the chunk's
+      frame count, no missing or extra pieces); prints an ffmpeg concat list on success, the problems on stderr and exit 1 otherwise.
+  python tools/render_plan.py --long-chapter long/<NNN-slug>/ch<N>
+      prints {"chapter": "<NNN-slug>-ch<N>", "composition": "ojl-<NNN-slug>-ch<N>", "frames": n, "matrix": {...}} for one
+      long 16:9 chapter (needs Video.tsx and chapter.json in the folder; exit 1 with a message otherwise).
   python tools/render_plan.py --video ID --queue-yml OUT
       writes the queue's <ID>.yml: the video's meta.yml plus `frames` and `rendered_at`.
 """
 import argparse
 import json
+import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -34,6 +38,7 @@ CHUNKS = 16
 WIDTH, HEIGHT = 1080, 1920
 VIDEOS = ROOT / "videos"
 STATE = ROOT / "state"
+LONG_CHAPTER_RE = re.compile(r"long/([0-9]{3}-[a-z0-9-]+)/(ch[0-9]+)")
 
 
 def chunks(frames, n=CHUNKS):
@@ -109,6 +114,21 @@ def plan(video=None):
             "matrix": {"include": chunks(frames)}}
 
 
+def long_plan(path):
+    """plan for one long chapter folder `long/<NNN-slug>/ch<N>` (relative to the repo root)"""
+    m = LONG_CHAPTER_RE.fullmatch(path)
+    if not m:
+        raise ValueError(f"{path!r} is not a long chapter folder (long/<NNN-slug>/ch<N>)")
+    folder = ROOT / path
+    for name in ("Video.tsx", "chapter.json"):
+        if not (folder / name).is_file():
+            raise ValueError(f"{path}: missing {name}")
+    chapter = f"{m.group(1)}-{m.group(2)}"
+    frames = spec.frames(folder)
+    return {"chapter": chapter, "composition": f"ojl-{chapter}", "frames": frames,
+            "matrix": {"include": chunks(frames)}}
+
+
 def probe_piece(path):
     r = subprocess.run(["ffprobe", "-v", "error", "-count_frames", "-show_entries",
                         "format=format_name:stream=codec_type,codec_name,width,height,nb_read_frames", "-of", "json",
@@ -118,7 +138,7 @@ def probe_piece(path):
     return json.loads(r.stdout)
 
 
-def piece_problems(probe, want_frames):
+def piece_problems(probe, want_frames, width=WIDTH, height=HEIGHT):
     """what is wrong with one rendered piece, from ffprobe's JSON"""
     if "error" in probe:
         return [f"unreadable: {probe['error']}"]
@@ -133,15 +153,15 @@ def piece_problems(probe, want_frames):
     if v:
         if v.get("codec_name") != "h264":
             out.append(f"codec {v.get('codec_name')} (want h264)")
-        if (v.get("width"), v.get("height")) != (WIDTH, HEIGHT):
-            out.append(f"size {v.get('width')}x{v.get('height')} (want {WIDTH}x{HEIGHT})")
+        if (v.get("width"), v.get("height")) != (width, height):
+            out.append(f"size {v.get('width')}x{v.get('height')} (want {width}x{height})")
         got = v.get("nb_read_frames")
         if str(got) != str(want_frames):
             out.append(f"{got} frames (want {want_frames})")
     return out
 
 
-def check_pieces(pieces_dir, chunk_list):
+def check_pieces(pieces_dir, chunk_list, width=WIDTH, height=HEIGHT):
     """problems with the downloaded pieces against the chunk plan (empty = all present and well-formed)"""
     pieces_dir = Path(pieces_dir)
     want = {f"piece_{c['idx']}.mp4": c["to"] - c["from"] + 1 for c in chunk_list}
@@ -151,7 +171,7 @@ def check_pieces(pieces_dir, chunk_list):
         if not p.is_file():
             out.append(f"{name} missing")
         else:
-            out += [f"{name}: {x}" for x in piece_problems(probe_piece(p), n)]
+            out += [f"{name}: {x}" for x in piece_problems(probe_piece(p), n, width, height)]
     return out
 
 
@@ -170,6 +190,9 @@ def main(argv):
     ap.add_argument("--queue-yml", metavar="OUT")
     ap.add_argument("--check-pieces", metavar="DIR")
     ap.add_argument("--frames", type=int)
+    ap.add_argument("--width", type=int, default=WIDTH, help="--check-pieces: expected piece width")
+    ap.add_argument("--height", type=int, default=HEIGHT, help="--check-pieces: expected piece height")
+    ap.add_argument("--long-chapter", metavar="DIR", help="plan one long chapter, e.g. long/000-sample/ch1")
     a = ap.parse_args(argv)
     video = a.video.strip() or None
     if video and not video_check.NAME_RE.fullmatch(video):
@@ -178,12 +201,21 @@ def main(argv):
         if not a.frames:
             ap.error("--check-pieces needs --frames")
         cs = chunks(a.frames)
-        probs = check_pieces(a.check_pieces, cs)
+        probs = check_pieces(a.check_pieces, cs, a.width, a.height)
         if probs:
             print("\n".join(probs), file=sys.stderr)
             return 1
         d = Path(a.check_pieces).resolve().as_posix()
         print("\n".join(f"file '{d}/piece_{c['idx']}.mp4'" for c in cs))
+        return 0
+    if a.long_chapter:
+        if not LONG_CHAPTER_RE.fullmatch(a.long_chapter):
+            ap.error(f"--long-chapter {a.long_chapter!r} is not long/<NNN-slug>/ch<N>")
+        try:
+            print(json.dumps(long_plan(a.long_chapter)))
+        except (ValueError, OSError) as e:
+            print(e, file=sys.stderr)
+            return 1
         return 0
     if a.queue_yml:
         if not video:
