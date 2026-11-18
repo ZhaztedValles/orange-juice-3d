@@ -1,4 +1,4 @@
-// "This 1583 Shipwreck Padlock Stayed Locked for 400 Years. A Scanner Just Cracked Its Code": our original 67 s short in the flat-characters-in-a-3D-toon-world style.
+// "Legend Says These Wives Carried Their Husbands Out of a Siege": our original 65 s short in the flat-characters-in-a-3D-toon-world style.
 // One three.js world (world.ts) posed per frame from the story timeline (story.ts). Post chain (look-match pass):
 //   InkPass (world ink lines, own pass) -> lens blur pre + main (thin-lens DOF per shot from dofAt) ->
 //   [bloom (emissive only) + NEUTRAL tone mapping + colour grade] (one merged EffectPass), MSAA 4.
@@ -21,7 +21,7 @@ import { Kit } from "../../src/engine/build";
 import { TOTAL, FLASH_AT, SHOTS, layersAt, dofAt } from "./story";
 
 // A number literal: audio/spec.py reads it with a regex. Must equal the story length.
-export const FRAMES = 2010;
+export const FRAMES = 1950;
 if (FRAMES !== TOTAL) throw new Error(`FRAMES ${FRAMES} != story TOTAL ${TOTAL}`);
 
 /** A/B switches for test stills only (Remotion inputProps `{ post: { ink: false, ... } }`); everything is on by default. */
@@ -43,7 +43,7 @@ const fwd = new THREE.Vector3(), fpt = new THREE.Vector3();
 
 const useKit = () => {
   const [kit, setKit] = useState<Kit | null>(null);
-  const [handle] = useState(() => delayRender("shipwreck lock kit"));
+  const [handle] = useState(() => delayRender("weinsberg kit"));
   useEffect(() => { loadKit().then((k) => { setKit(k); continueRender(handle); }); }, [handle]);
   return kit;
 };
@@ -106,7 +106,7 @@ const ShotView: React.FC<{ id: number; kit: Kit; alpha: number }> = ({ id, kit, 
   </AbsoluteFill>
 );
 
-const ShipwreckLockShort: React.FC = () => {
+const WeinsbergWivesShort: React.FC = () => {
   const f = useCurrentFrame();
   const kit = useKit();
   if (!kit) return null;
@@ -119,4 +119,4 @@ const ShipwreckLockShort: React.FC = () => {
   );
 };
 
-export default ShipwreckLockShort;
+export default WeinsbergWivesShort;
