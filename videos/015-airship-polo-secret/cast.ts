@@ -323,7 +323,7 @@ const dinnerSet = (id: number, t: number, cam: CamInfo, out: Stage) => {
     card(out, "bubbleO", 360, 300, (p) => drawBubble(p, false), dx + 0.9, D0 + 2.4, dz - 0.9, 0.85 * b, 0.71 * b);
     return;
   }
-  const g = grow(t, T_TOLD, 0.3);
+  const g = grow(t, T_TOLD, 0.9);
   card(out, "bubbleA", 360, 300, (p) => drawBubble(p, true), dx - 0.55, D0 + 2.05, dz - 0.85, 0.7 * g, 0.58 * g);
   burst(out, t, kickT(T_FIRST2), dx - 0.55, D0 + 2.05, dz - 0.8, 1.0);
 };
