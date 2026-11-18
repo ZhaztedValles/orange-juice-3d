@@ -192,3 +192,16 @@
   date: "2026-11-18"
   kind: "true"
   category: aviation
+- id: 016-weinsberg-wives-carry
+  claim: "Legend says that on the twenty-first of December 1140 King Conrad the Third, besieging Weinsberg, let the women leave with whatever they could carry on their shoulders, and they came out carrying their husbands."
+  topics: [weinsberg, weibertreu, conrad-iii, siege]
+  sources:
+    - https://en.wikipedia.org/wiki/Siege_of_Weinsberg
+    - https://sites.pitt.edu/~dash/legend493.html
+  scores: {strange: 5, obscurity: 4, people: 5, visual: 5, provable: 4}
+  status: coded
+  reason: ""
+  video: 016-weinsberg-wives-carry
+  date: "2026-11-18"
+  kind: "legend"
+  category: siege
