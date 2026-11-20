@@ -205,3 +205,17 @@
   date: "2026-11-18"
   kind: "legend"
   category: siege
+- id: 017-iguanodon-dinner
+  claim: "On New Year's Eve 1853 the sculptor Benjamin Waterhouse Hawkins hosted about twenty-one men of science and business at a dinner inside the clay mould of his life-size Iguanodon for the Crystal Palace park, a model that wore the animal's thumb spike as a horn on its nose."
+  topics: [iguanodon, waterhouse-hawkins, crystal-palace-dinosaurs, victorian-dinner]
+  sources:
+    - https://profjoecain.net/dinner-iguanodon-crystal-palace-dinosaurs/
+    - https://blog.geolsoc.org.uk/2021/04/15/the-first-dinosaurs-dinner/
+    - https://www.nhm.ac.uk/discover/the-discovery-of-iguanodon.html
+  scores: {strange: 5, obscurity: 3, people: 5, visual: 5, provable: 5}
+  status: coded
+  reason: ""
+  video: 017-iguanodon-dinner
+  date: "2026-11-21"
+  kind: "true"
+  category: science
