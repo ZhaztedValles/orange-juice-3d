@@ -219,3 +219,14 @@
   date: "2026-11-21"
   kind: "true"
   category: science
+- id: 018-honey-cake-puzzle
+  claim: "An invented puzzle: during a village harvest boat race someone steals one of three prize bakes from a bakery window, and the thief gives themselves away by naming the stolen honey cake that nobody was told about."
+  topics: [stolen-honey-cake, bakery-window, boat-race, village-fair]
+  sources: []
+  scores: {strange: 4, obscurity: 5, people: 5, visual: 5, provable: 5}
+  status: coded
+  reason: ""
+  video: 018-honey-cake-puzzle
+  date: "2026-11-21"
+  kind: "puzzle"
+  category: mystery
