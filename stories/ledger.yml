@@ -230,3 +230,17 @@
   date: "2026-11-21"
   kind: "puzzle"
   category: mystery
+- id: 019-cody-kite-channel
+  claim: "On the night of the fifth of November 1903 the showman Samuel Franklin Cody crossed the English Channel from Calais to Dover in a small collapsible Berthon boat pulled only by one of his kites, landing about thirteen hours later."
+  topics: [samuel-cody, kite-boat, english-channel, berthon-boat]
+  sources:
+    - https://sfcody.org.uk/2024/06/14/s-f-cody-kites/
+    - https://en.wikipedia.org/wiki/Samuel_Franklin_Cody
+    - https://dovermuseum.co.uk/Information-Resources/HPAC-Biographical/Channel-Crossing-Biography.aspx
+  scores: {strange: 5, obscurity: 4, people: 4, visual: 5, provable: 4}
+  status: coded
+  reason: ""
+  video: 019-cody-kite-channel
+  date: "2026-11-21"
+  kind: "true"
+  category: seafaring
