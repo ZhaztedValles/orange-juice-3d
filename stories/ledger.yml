@@ -244,3 +244,16 @@
   date: "2026-11-21"
   kind: "true"
   category: seafaring
+- id: 020-peppers-ghost-glass
+  claim: "On Christmas Eve 1862 at the Royal Polytechnic Institution in London, John Henry Pepper made a ghost appear beside living actors on stage, using a large tilted sheet of glass that reflected a brightly lit actor hidden in the orchestra pit, an idea first worked out by the engineer Henry Dircks."
+  topics: [pepper, ghost, illusion, glass, theatre]
+  sources:
+    - https://www.scientificamerican.com/article/how-ghostbusting-became-a-victorian-pastime/
+    - https://www.lindahall.org/about/news/scientist-of-the-day/john-henry-pepper/
+  scores: {strange: 4, obscurity: 3, people: 5, visual: 4, provable: 5}
+  status: coded
+  reason: ""
+  video: 020-peppers-ghost-glass
+  date: "2026-11-21"
+  kind: "how-it-works"
+  category: illusion

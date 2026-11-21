@@ -1,0 +1,238 @@
+{
+ "music": [
+  {
+   "from": 0,
+   "to": 5.95,
+   "mood": "mystery"
+  },
+  {
+   "from": 5.95,
+   "to": 11.7,
+   "mood": "playful"
+  },
+  {
+   "from": 11.7,
+   "to": 19.55,
+   "mood": "tension"
+  },
+  {
+   "from": 19.55,
+   "to": 29.8,
+   "mood": "playful"
+  },
+  {
+   "from": 29.8,
+   "to": 39.3,
+   "mood": "mystery"
+  },
+  {
+   "from": 39.3,
+   "to": 49.9,
+   "mood": "warm"
+  },
+  {
+   "from": 49.9,
+   "to": 58.1,
+   "mood": "march"
+  },
+  {
+   "from": 58.1,
+   "to": 60.15,
+   "mood": "playful"
+  },
+  {
+   "from": 60.15,
+   "to": 66.5,
+   "mood": "sad"
+  }
+ ],
+ "key": "Eb",
+ "bpm": 104,
+ "sfx": [
+  {
+   "t": 2.6,
+   "kind": "whoosh",
+   "dur": 1.2,
+   "gain_db": -10,
+   "pan": 0.2
+  },
+  {
+   "t": 4.5,
+   "kind": "whoa",
+   "dur": 1.2,
+   "gain_db": -8
+  },
+  {
+   "t": 5.95,
+   "kind": "breeze",
+   "dur": 2.1,
+   "gain_db": -16
+  },
+  {
+   "t": 8.1,
+   "kind": "applause",
+   "dur": 3.5,
+   "gain_db": -10
+  },
+  {
+   "t": 12.5,
+   "kind": "swing_squeak",
+   "gain_db": -14
+  },
+  {
+   "t": 13.5,
+   "kind": "creak",
+   "dur": 1.2,
+   "gain_db": -16
+  },
+  {
+   "t": 15.6,
+   "kind": "whoosh",
+   "dur": 0.6,
+   "gain_db": -14
+  },
+  {
+   "t": 17.25,
+   "kind": "rattle",
+   "dur": 0.6,
+   "gain_db": -14
+  },
+  {
+   "t": 18.75,
+   "kind": "oof",
+   "gain_db": -10
+  },
+  {
+   "t": 21.5,
+   "kind": "stroll_step",
+   "gain_db": -10
+  },
+  {
+   "t": 21.9,
+   "kind": "stroll_step",
+   "gain_db": -10
+  },
+  {
+   "t": 24.12,
+   "kind": "push_thump",
+   "gain_db": -6
+  },
+  {
+   "t": 25.8,
+   "kind": "creak",
+   "dur": 1.0,
+   "gain_db": -14
+  },
+  {
+   "t": 26.9,
+   "kind": "clink",
+   "dur": 0.8,
+   "gain_db": -10,
+   "pan": 0.3
+  },
+  {
+   "t": 28.25,
+   "kind": "creak",
+   "dur": 0.9,
+   "gain_db": -13
+  },
+  {
+   "t": 30.55,
+   "kind": "whoosh",
+   "dur": 1.0,
+   "gain_db": -14
+  },
+  {
+   "t": 31.1,
+   "kind": "whoosh",
+   "dur": 1.4,
+   "gain_db": -10,
+   "pan": 0.2
+  },
+  {
+   "t": 34.5,
+   "kind": "stroll_step",
+   "gain_db": -10
+  },
+  {
+   "t": 35.15,
+   "kind": "stroll_step",
+   "gain_db": -10
+  },
+  {
+   "t": 35.75,
+   "kind": "stroll_step",
+   "gain_db": -10
+  },
+  {
+   "t": 37.28,
+   "kind": "whoa",
+   "dur": 1.4,
+   "gain_db": -6
+  },
+  {
+   "t": 39.3,
+   "kind": "crickets",
+   "dur": 6.7,
+   "gain_db": -16
+  },
+  {
+   "t": 44.38,
+   "kind": "whoosh",
+   "dur": 0.9,
+   "gain_db": -14
+  },
+  {
+   "t": 45.95,
+   "kind": "push_thump",
+   "gain_db": -10
+  },
+  {
+   "t": 48.45,
+   "kind": "whoosh",
+   "dur": 1.0,
+   "gain_db": -11
+  },
+  {
+   "t": 50.3,
+   "kind": "applause",
+   "dur": 1.6,
+   "gain_db": -14
+  },
+  {
+   "t": 52.0,
+   "kind": "clink",
+   "dur": 0.6,
+   "gain_db": -12
+  },
+  {
+   "t": 53.4,
+   "kind": "rattle",
+   "dur": 0.8,
+   "gain_db": -12
+  },
+  {
+   "t": 55.0,
+   "kind": "push_thump",
+   "gain_db": -10
+  },
+  {
+   "t": 56.0,
+   "kind": "clink",
+   "dur": 0.5,
+   "gain_db": -14
+  },
+  {
+   "t": 58.0,
+   "kind": "applause",
+   "dur": 2.2,
+   "gain_db": -8
+  },
+  {
+   "t": 61.3,
+   "kind": "whoosh",
+   "dur": 1.6,
+   "gain_db": -16
+  }
+ ]
+}
