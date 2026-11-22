@@ -283,3 +283,17 @@
   date: "2026-11-22"
   kind: "true-crime"
   category: heist
+- id: 023-atlantic-cable-fire
+  claim: "In August 1858 the first Atlantic telegraph cable carried Queen Victoria's ninety-eight-word greeting to President Buchanan in almost sixteen hours, New York's celebration fireworks set the dome of City Hall on fire, and within weeks the cable went dead after the electrician Wildman Whitehouse pushed up to two thousand volts through it."
+  topics: [atlantic-cable, telegraph, city-hall, fireworks, cyrus-field]
+  sources:
+    - https://spectrum.ieee.org/tech-history/heroic-failures/the-first-transatlantic-telegraph-cable-was-a-bold-beautiful-failure
+    - https://www.lindahall.org/about/news/scientist-of-the-day/uss-niagara/
+    - https://www.metmuseum.org/art/collection/search/655617
+  scores: {strange: 5, obscurity: 3, people: 4, visual: 5, provable: 5}
+  status: coded
+  reason: ""
+  video: 023-atlantic-cable-fire
+  date: "2026-11-23"
+  kind: "true"
+  category: telegraph
