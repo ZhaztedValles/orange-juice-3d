@@ -43,6 +43,8 @@ import V020, { FRAMES as F020 } from "../videos/020-peppers-ghost-glass/Video";
 import W020 from "../videos/020-peppers-ghost-glass/words.json";
 import V021, { FRAMES as F021 } from "../videos/021-moulins-zinc-balls/Video";
 import W021 from "../videos/021-moulins-zinc-balls/words.json";
+import V022, { FRAMES as F022 } from "../videos/022-pearls-sugar-lumps/Video";
+import W022 from "../videos/022-pearls-sugar-lumps/words.json";
 
 export type VideoEntry = { id: string; Component: React.FC; frames: number; words: Word[] | null };
 
@@ -68,6 +70,7 @@ export const VIDEOS: VideoEntry[] = [
   { id: "019-cody-kite-channel", Component: V019, frames: F019, words: W019 as Word[] },
   { id: "020-peppers-ghost-glass", Component: V020, frames: F020, words: W020 as Word[] },
   { id: "021-moulins-zinc-balls", Component: V021, frames: F021, words: W021 as Word[] },
+  { id: "022-pearls-sugar-lumps", Component: V022, frames: F022, words: W022 as Word[] },
 ];
 
 import L0, { FRAMES as LF0 } from "../long/000-sample/ch1/Video";

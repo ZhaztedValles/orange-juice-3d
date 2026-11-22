@@ -270,3 +270,16 @@
   date: "2026-11-22"
   kind: "true"
   category: wartime-mail
+- id: 022-pearls-sugar-lumps
+  claim: "In July 1913 a necklace of sixty-one pearls sent back by registered post from Paris to the Hatton Garden dealer Max Mayer in London arrived with its seals intact but only lumps of sugar inside, and after Joseph Grizzard's gang was arrested the pearls turned up in a matchbox dropped in a Highbury gutter, found by the piano maker Augustus Horne."
+  topics: [great-pearl-robbery, pearl-necklace, sugar-lumps, hatton-garden]
+  sources:
+    - https://en.wikipedia.org/wiki/Great_Pearl_Robbery
+    - https://www.lloyds.com/about-lloyds/history/catastrophes-and-claims/great-pearl-robbery
+  scores: {strange: 5, obscurity: 4, people: 5, visual: 5, provable: 4}
+  status: coded
+  reason: ""
+  video: 022-pearls-sugar-lumps
+  date: "2026-11-22"
+  kind: "true-crime"
+  category: heist
