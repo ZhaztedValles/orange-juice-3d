@@ -297,3 +297,17 @@
   date: "2026-11-23"
   kind: "true"
   category: telegraph
+- id: 024-balloon-sponge-countdown
+  claim: "On the twenty-first of November 1783 Pilatre de Rozier and the Marquis d'Arlandes made the first free flight by people, about twenty-five minutes over Paris in a Montgolfier hot-air balloon whose straw fire kept burning holes in the envelope, which they put out with wet sponges, and when they landed between windmills Pilatre was smothered under the collapsing fabric."
+  topics: [pilatre-de-rozier, arlandes, montgolfier, first-free-flight, sponge]
+  sources:
+    - https://www.lindahall.org/about/news/scientist-of-the-day/francois-laurent-darlandes/
+    - https://collection.sciencemuseumgroup.org.uk/objects/co29133/model-of-montgolfier-balloon-used-in-first-demonstration-to-carry-human-passengers-in-free-flight
+    - https://en.wikipedia.org/wiki/Jean-Fran%C3%A7ois_Pil%C3%A2tre_de_Rozier
+  scores: {strange: 4, obscurity: 3, people: 5, visual: 5, provable: 5}
+  status: coded
+  reason: ""
+  video: 024-balloon-sponge-countdown
+  date: "2026-11-23"
+  kind: "countdown"
+  category: flight
