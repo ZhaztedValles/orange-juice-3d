@@ -145,10 +145,11 @@ const crowd = (cam: CamInfo, t: number, out: Stage, n: number, cheer: number, mo
 };
 const flames = (out: Stage, t: number, u: number, big = 1) => {
   if (u <= 0.01) return;
-  const k = Math.floor(t * 10) % 6, [x, y, z] = DOME;
-  card(out, `flame|${k}`, 300, 400, drawFlame(k), x - 0.4, y - 1.6 + 2.2 * u * big, z + 2.6, 4.2 * u * big, 5.6 * u * big);
-  card(out, `flame|${(k + 3) % 6}`, 300, 400, drawFlame((k + 3) % 6), x + 1.6, y - 2.6 + 1.6 * u * big, z + 2.0, 2.8 * u * big, 3.8 * u * big);
-  card(out, `smoke|${k}`, 300, 300, drawSmoke(k), x - 0.8, y + 3.2 + 3.5 * u + 0.4 * Math.sin(t), z - 0.5, 6.5 * u, 6.5 * u, { soft: true });
+  // fixed drawings with a smooth flicker in size and sway (swapping drawings every few frames read as pops in QA)
+  const [x, y, z] = DOME, fw = 1 + 0.05 * Math.sin(t * 7.3), fh = 1 + 0.08 * Math.sin(t * 9.1 + 1.0), gw = 1 + 0.05 * Math.sin(t * 8.2 + 2.0), gh = 1 + 0.08 * Math.sin(t * 6.7 + 0.4);
+  card(out, "flame|0", 300, 400, drawFlame(0), x - 0.4, y - 1.6 + 2.2 * u * big * fh, z + 2.6, 4.2 * u * big * fw, 5.6 * u * big * fh, { rot: 0.04 * Math.sin(t * 5.1) });
+  card(out, "flame|3", 300, 400, drawFlame(3), x + 1.6, y - 2.6 + 1.6 * u * big * gh, z + 2.0, 2.8 * u * big * gw, 3.8 * u * big * gh, { rot: 0.05 * Math.sin(t * 4.3 + 1.0) });
+  card(out, "smoke|0", 300, 300, drawSmoke(0), x - 0.8, y + 3.2 + 3.5 * u + 0.4 * Math.sin(t), z - 0.5, 6.5 * u, 6.5 * u, { soft: true, rot: 0.12 * t });
 };
 
 // ---------------- the shots ----------------
