@@ -1,0 +1,14 @@
+# Facts: Putney Heath, south-west London. David Hartley the Younger (about 1731-1813), MP for Hull, patented "fire-plates" in 1773: thin sheets of iron (or copper) laid between double floorboards and under floors, to stop fire and its air from passing between storeys (Wikipedia; Old and New London). On 16 May 1774 the House of Commons resolved to grant him up to two thousand five hundred pounds for experiments (obelisk inscription, quoted on Wikipedia). He built a fire-proof house on Putney Heath and repeatedly set fires in it before members of the City's Court, MPs and the Lord Mayor (Wikipedia; Old and New London). Sir Richard Phillips, writing in 1817, was shown "the chamber in which, in 1774, the king and queen took their breakfast" while "fires were lighted on the floor" of the room directly beneath; the lower boards were charred, the upper ones survived (Old and New London, vol. 6, Putney). The royal breakfast is told as an account, "said to". On 22 November 1776 the City ordered Hartley admitted to its Freedom; Lord Mayor John Sawbridge laid the foundation stone of the obelisk on Putney Heath on the anniversary of the Great Fire, 110 years after it (obelisk inscriptions; Old and New London). The invention "sank into obscurity"; by 1817 the house was being converted into a mansion (Old and New London). On 3 September 1783 the definitive Treaty of Paris ending the American Revolutionary War was signed by Hartley for Great Britain and by Adams, Franklin and Jay at Hartley's lodgings at the Hotel d'York in Paris (US National Archives).
+Sources: https://www.british-history.ac.uk/old-new-london/vol6/pp489-503, https://en.wikipedia.org/wiki/David_Hartley_(the_Younger), https://www.archives.gov/milestone-documents/treaty-of-paris
+
+<!-- narration -->
+In seventeen seventy-four the King and Queen of Britain are said to have eaten breakfast with a fire burning right under their feet.
+The house stood on Putney Heath near London and belonged to David Hartley a member of Parliament with one proud idea of thin iron plates hidden under the floorboards.
+London still feared another Great Fire so Parliament paid him thousands of pounds to prove they worked.
+Hartley set fires in his house again and again while the Lord Mayor watched from the room above.
+Then the story says the King and Queen sat down to breakfast upstairs while the flames roared below.
+The lower boards burned black and everyone waited for the floor to give way but it never did.
+You see, fire needs air and an open path to climb and the iron sheet worked like a lid slammed on a burning frying pan so the flames had nowhere to go.
+The City made Hartley a freeman and laid the first stone of an obelisk beside the house, then the idea was forgotten.
+But nine years later the peace that ended the American war was signed in Hartley's rooms in Paris, and the man who stopped fires from spreading helped stop a war.
+<!-- /narration -->

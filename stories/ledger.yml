@@ -337,3 +337,17 @@
   date: "2026-11-24"
   kind: "what-if"
   category: archaeology
+- id: 027-fire-plate-breakfast
+  claim: "In the seventeen-seventies the MP David Hartley built a fire-proof house on Putney Heath, with thin iron plates laid under the floorboards, and set fires on the floor of a room while guests, said to include King George the Third and Queen Charlotte at breakfast, sat in the room directly above; the City made him a freeman in November 1776, and in 1783 the peace treaty ending the American war was signed in his Paris lodgings."
+  topics: [hartley-fire-plates, fireproof-house, putney-heath, david-hartley]
+  sources:
+    - https://www.british-history.ac.uk/old-new-london/vol6/pp489-503
+    - https://en.wikipedia.org/wiki/David_Hartley_(the_Younger)
+    - https://www.archives.gov/milestone-documents/treaty-of-paris
+  scores: {strange: 5, obscurity: 4, people: 5, visual: 5, provable: 4}
+  status: coded
+  reason: ""
+  video: 027-fire-plate-breakfast
+  date: "2026-11-24"
+  kind: "true"
+  category: invention
