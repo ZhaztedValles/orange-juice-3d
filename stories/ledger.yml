@@ -324,3 +324,16 @@
   date: "2026-11-23"
   kind: "true"
   category: motoring
+- id: 026-tut-last-season
+  claim: "In 1922 Lord Carnarvon, ready to stop paying for the search, agreed to fund Howard Carter for one last season in the Valley of the Kings, and that November Carter's men found a step under the remains of ancient workmen's huts that led down to the sealed tomb of Tutankhamun; the video imagines what would have happened if he had said no."
+  topics: [tutankhamun, howard-carter, carnarvon, valley-of-the-kings, last-season]
+  sources:
+    - https://tutankhamun.griffith.ox.ac.uk/seasons/1st-season-1922-1923
+    - https://www.nationalgeographic.com/history/history-magazine/article/findingkingtutstomb
+  scores: {strange: 4, obscurity: 3, people: 5, visual: 4, provable: 5}
+  status: coded
+  reason: ""
+  video: 026-tut-last-season
+  date: "2026-11-24"
+  kind: "what-if"
+  category: archaeology

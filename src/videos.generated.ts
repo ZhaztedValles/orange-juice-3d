@@ -51,6 +51,8 @@ import V024, { FRAMES as F024 } from "../videos/024-balloon-sponge-fire/Video";
 import W024 from "../videos/024-balloon-sponge-fire/words.json";
 import V025, { FRAMES as F025 } from "../videos/025-snow-race-thanksgiving/Video";
 import W025 from "../videos/025-snow-race-thanksgiving/words.json";
+import V026, { FRAMES as F026 } from "../videos/026-tut-last-season/Video";
+import W026 from "../videos/026-tut-last-season/words.json";
 
 export type VideoEntry = { id: string; Component: React.FC; frames: number; words: Word[] | null };
 
@@ -80,6 +82,7 @@ export const VIDEOS: VideoEntry[] = [
   { id: "023-atlantic-cable-fire", Component: V023, frames: F023, words: W023 as Word[] },
   { id: "024-balloon-sponge-fire", Component: V024, frames: F024, words: W024 as Word[] },
   { id: "025-snow-race-thanksgiving", Component: V025, frames: F025, words: W025 as Word[] },
+  { id: "026-tut-last-season", Component: V026, frames: F026, words: W026 as Word[] },
 ];
 
 import L0, { FRAMES as LF0 } from "../long/000-sample/ch1/Video";
