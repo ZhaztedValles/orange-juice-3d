@@ -1,9 +1,7 @@
 {
- "status": "held",
- "reasons": [
-  "5 unplanned pop frames (max 2)"
- ],
+ "status": "queued",
+ "reasons": [],
  "attempts": 1,
- "updated": "2026-11-22T17:25:31+00:00",
- "source": "17128f5b7e4063b922f473e4f09875276d3eb852"
+ "updated": "2026-11-23T05:53:42+00:00",
+ "source": "c19ead3f96dc5445d82f73b18b611b9af8d8ab66"
 }
