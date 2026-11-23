@@ -24,13 +24,13 @@ const KID: Outfit = { jacket: "#3f6fb5", pants: "#3b3f52", boots: "#4a3426", hat
 const FOLK = [0, 1, 2, 3, 4, 5, 6, 7].map(townsfolk);
 
 // ---------------- drawings ----------------
-/** flames (300 x 400): tongues of red, orange and yellow, flickering by variant k */
+/** flames (300 x 400): tongues of red, orange and yellow, flickering smoothly with the phase k (radians, period 2 pi) */
 const drawFlame = (k: number) => (p: Pen) => {
   const tongues = (col: string, s: number, w: number) => {
     const pts: [number, number][] = [[150 - 130 * w, 390]];
     for (let i = 0; i < 5; i++) {
-      const x = 150 - 130 * w + (260 * w * (i + 0.5)) / 5, h = s * (220 + 110 * Math.sin(i * 2.1 + k * 1.7));
-      pts.push([x - 22 * w, 390 - h * 0.45], [x + 6 * Math.sin(k + i), 390 - h], [x + 22 * w, 390 - h * 0.45]);
+      const x = 150 - 130 * w + (260 * w * (i + 0.5)) / 5, h = s * (220 + 80 * Math.sin(i * 2.1 + 2 * k) + 30 * Math.sin(i * 1.3 + 3 * k));
+      pts.push([x - 22 * w, 390 - h * 0.45], [x + 6 * Math.sin(2 * k + i), 390 - h], [x + 22 * w, 390 - h * 0.45]);
     }
     pts.push([150 + 130 * w, 390]);
     p.poly(pts, col, 6);
@@ -40,14 +40,14 @@ const drawFlame = (k: number) => (p: Pen) => {
 /** soft smoke (300 x 300): grey puffs */
 const drawSmoke = (k: number, dark = 0.5) => (p: Pen) => {
   for (let i = 0; i < 6; i++) {
-    const a = i * 1.1 + k * 0.3, r = 46 + 18 * (i % 3);
+    const a = i * 1.1 + 0.3 * Math.sin(k + i), r = 46 + 18 * (i % 3);
     p.ell(150 + 70 * Math.cos(a), 170 + 50 * Math.sin(a) - i * 10, r, r * 0.85, `rgba(${Math.round(90 + 60 * (1 - dark))},${Math.round(84 + 60 * (1 - dark))},${Math.round(90 + 60 * (1 - dark))},0.85)`, 0);
   }
 };
-/** falling sparks (300 x 300) */
+/** falling sparks (300 x 300) at fall phase k in 0..1: each spark drifts down and wraps to the top */
 const drawSparks = (k: number) => (p: Pen) => {
   for (let i = 0; i < 14; i++) {
-    const x = 30 + ((i * 97 + k * 13) % 240), y = 20 + ((i * 53 + k * 41) % 260);
+    const x = 30 + ((i * 97) % 240) + 8 * Math.sin(2 * Math.PI * k + i), y = 20 + 260 * ((((i * 53) % 260) / 260 + k) % 1);
     p.ell(x, y, 7, 7, i % 2 ? "#ffe07a" : "#ffb04a", 3);
   }
 };
@@ -120,6 +120,8 @@ const card = (out: Stage, key: string, cw: number, ch: number, draw: (p: Pen) =>
   if (w > 0.004 && h > 0.004) out.fx.push({ key, cw, ch, draw, x, y, z, w, h, ...extra });
 };
 const at = (t: number, t0: number) => t >= t0 - 0.07;
+/** the frame number modulo 60: the phase of the looping fire, smoke and spark drawings (one small step per frame) */
+const PH = (t: number) => Math.round(t * 30) % 60;
 /** the point d metres from (x, z) toward the camera (props held in front of a character card) */
 const toCam = (cam: CamInfo, x: number, z: number, d: number): [number, number] => {
   const dx = cam.pos.x - x, dz = cam.pos.z - z, l = Math.hypot(dx, dz) || 1;
@@ -145,10 +147,10 @@ const crowd = (cam: CamInfo, t: number, out: Stage, n: number, cheer: number, mo
 };
 const flames = (out: Stage, t: number, u: number, big = 1) => {
   if (u <= 0.01) return;
-  const k = Math.floor(t * 10) % 6, [x, y, z] = DOME;
-  card(out, `flame|${k}`, 300, 400, drawFlame(k), x - 0.4, y - 1.6 + 2.2 * u * big, z + 2.6, 4.2 * u * big, 5.6 * u * big);
-  card(out, `flame|${(k + 3) % 6}`, 300, 400, drawFlame((k + 3) % 6), x + 1.6, y - 2.6 + 1.6 * u * big, z + 2.0, 2.8 * u * big, 3.8 * u * big);
-  card(out, `smoke|${k}`, 300, 300, drawSmoke(k), x - 0.8, y + 3.2 + 3.5 * u + 0.4 * Math.sin(t), z - 0.5, 6.5 * u, 6.5 * u, { soft: true });
+  const n = PH(t), k = (2 * Math.PI * n) / 60, n2 = (n + 30) % 60, [x, y, z] = DOME;
+  card(out, `flame|${n}`, 300, 400, drawFlame(k), x - 0.4, y - 1.6 + 2.2 * u * big, z + 2.6, 4.2 * u * big, 5.6 * u * big);
+  card(out, `flame|${n2}`, 300, 400, drawFlame((2 * Math.PI * n2) / 60), x + 1.6, y - 2.6 + 1.6 * u * big, z + 2.0, 2.8 * u * big, 3.8 * u * big);
+  card(out, `smoke|${n}`, 300, 300, drawSmoke(k), x - 0.8, y + 3.2 + 3.5 * u + 0.4 * Math.sin(t), z - 0.5, 6.5 * u, 6.5 * u, { soft: true });
 };
 
 // ---------------- the shots ----------------
@@ -156,7 +158,7 @@ const shots = (id: number, t: number, cam: CamInfo, out: Stage) => {
   if (id === 1) { // the hook (golden): the crowd cheers under fireworks; the cupola catches fire
     crowd(cam, t, out, 12, at(t, T_CHEERED) ? 1 : 0, "smile");
     [0.2, 0.9, 1.7, 2.5, 3.2].forEach((t0, i) => firework(out, t, t0, HX + [-11, 9, -6, 12, -13][i], D0 + 22 + 3 * (i % 2), HZ + 3, 13, i));
-    if (at(t, T_SET)) card(out, `sparks|${Math.floor(t * 8) % 4}`, 300, 300, drawSparks(Math.floor(t * 8) % 4), DOME[0], DOME[1] + 3.5, DOME[2] + 2.8, 4, 4);
+    if (at(t, T_SET)) card(out, `sparks|${PH(t) % 30}`, 300, 300, drawSparks((PH(t) % 30) / 30), DOME[0], DOME[1] + 3.5, DOME[2] + 2.8, 4, 4);
     flames(out, t, fireAt(1, t));
     void T_FIRE;
     return;
@@ -205,7 +207,7 @@ const shots = (id: number, t: number, cam: CamInfo, out: Stage) => {
     return;
   }
   if (id === 8) { // golden: the cupola: sparks fall onto it, smoke, then flames
-    if (at(t, T_SPARKS)) { const k = Math.floor(t * 8) % 4; card(out, `sparks|${k}`, 300, 300, drawSparks(k), DOME[0] + 0.3, DOME[1] + 2.2 - 0.6 * ((t * 2) % 1), DOME[2] + 2.8, 3.6, 3.6); }
+    if (at(t, T_SPARKS)) { const n = PH(t) % 30; card(out, `sparks|${n}`, 300, 300, drawSparks(n / 30), DOME[0] + 0.3, DOME[1] + 1.9, DOME[2] + 2.8, 3.6, 3.6); }
     firework(out, t, T_SPARKS - 0.9, DOME[0] - 3, DOME[1] + 9, DOME[2] - 4, 9, 2);
     firework(out, t, T_SPARKS + 0.2, DOME[0] + 4, DOME[1] + 11, DOME[2] - 6, 8, 3);
     flames(out, t, fireAt(8, t));
@@ -267,8 +269,8 @@ const shots = (id: number, t: number, cam: CamInfo, out: Stage) => {
     return;
   }
   // id 15 (golden): the burnt cupola smokes; two citizens look at it and shrug
-  const k = Math.floor(t * 4) % 6;
-  card(out, `smoke|${k}`, 300, 300, drawSmoke(k, 0.3), DOME[0] - 0.5, DOME[1] + 1.2 + 0.3 * Math.sin(t), DOME[2], 5.5, 5.5, { soft: true });
+  const n = PH(t);
+  card(out, `smoke15|${n}`, 300, 300, drawSmoke((2 * Math.PI * n) / 60, 0.3), DOME[0] - 0.5, DOME[1] + 1.2 + 0.3 * Math.sin(t), DOME[2], 5.5, 5.5, { soft: true });
   const shrug = at(t, T_CHAT);
   front(cam, t, out, 11, FOLK[2], "f2", HX - 3.6, GY, HZ + 14, shrug ? "smile_closed" : at(t, T_BURNED) ? "pained" : "neutral", shrug ? { wave: 0.9 } : {});
   front(cam, t, out, 12, FOLK[5], "f5", HX - 1.0, GY, HZ + 15, at(t, T_WEEKS) ? "laugh" : shrug ? "grin" : "neutral", shrug ? { wave: 0.7 } : {});
