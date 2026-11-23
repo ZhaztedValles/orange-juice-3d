@@ -297,3 +297,17 @@
   date: "2026-11-23"
   kind: "true"
   category: telegraph
+- id: 024-balloon-sponge-fire
+  claim: "On the twenty-first of November 1783 Pilatre de Rozier and the Marquis d'Arlandes made the first free flight by people, about twenty-five minutes in a Montgolfier paper-and-cloth hot-air balloon over Paris, spending it stoking a straw fire and dabbing out burning spots on the balloon with wet sponges, before landing between two windmills on the Butte-aux-Cailles."
+  topics: [pilatre-de-rozier, d-arlandes, montgolfier, first-flight, hot-air-balloon]
+  sources:
+    - https://www.lindahall.org/about/news/scientist-of-the-day/francois-laurent-darlandes/
+    - https://www.guinnessworldrecords.com/news/2026/7/how-did-burning-shoes-and-flying-sheep-lead-to-the-first-hot-air-balloon
+    - https://en.wikipedia.org/wiki/Fran%C3%A7ois_Laurent_d%27Arlandes
+  scores: {strange: 4, obscurity: 3, people: 5, visual: 5, provable: 5}
+  status: coded
+  reason: ""
+  video: 024-balloon-sponge-fire
+  date: "2026-11-23"
+  kind: "countdown"
+  category: aviation
