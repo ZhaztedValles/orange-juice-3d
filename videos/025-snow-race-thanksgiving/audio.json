@@ -1,0 +1,189 @@
+{
+ "music": [
+  {
+   "from": 0,
+   "to": 7.3,
+   "mood": "hook"
+  },
+  {
+   "from": 7.3,
+   "to": 21.0,
+   "mood": "playful"
+  },
+  {
+   "from": 21.0,
+   "to": 25.6,
+   "mood": "tension"
+  },
+  {
+   "from": 25.6,
+   "to": 34.5,
+   "mood": "march"
+  },
+  {
+   "from": 34.5,
+   "to": 41.1,
+   "mood": "mystery"
+  },
+  {
+   "from": 41.1,
+   "to": 50.0,
+   "mood": "warm"
+  },
+  {
+   "from": 50.0,
+   "to": 52.6,
+   "mood": "hook"
+  },
+  {
+   "from": 52.6,
+   "to": 66.33333333333333,
+   "mood": "playful"
+  }
+ ],
+ "key": "F",
+ "bpm": 116,
+ "sfx": [
+  {
+   "t": 0.0,
+   "kind": "breeze",
+   "dur": 7.3,
+   "gain_db": -12
+  },
+  {
+   "t": 0.3,
+   "kind": "rattle",
+   "dur": 3.8,
+   "gain_db": -12
+  },
+  {
+   "t": 4.25,
+   "kind": "creak",
+   "dur": 1.5,
+   "gain_db": -10
+  },
+  {
+   "t": 12.45,
+   "kind": "clink",
+   "dur": 0.6,
+   "gain_db": -8
+  },
+  {
+   "t": 21.0,
+   "kind": "breeze",
+   "dur": 2.2,
+   "gain_db": -6
+  },
+  {
+   "t": 21.5,
+   "kind": "whoosh",
+   "dur": 1.2,
+   "gain_db": -8
+  },
+  {
+   "t": 23.4,
+   "kind": "applause",
+   "dur": 1.6,
+   "gain_db": -12
+  },
+  {
+   "t": 26.85,
+   "kind": "wood_crack",
+   "gain_db": -2
+  },
+  {
+   "t": 26.95,
+   "kind": "oof",
+   "gain_db": -6
+  },
+  {
+   "t": 28.6,
+   "kind": "creak",
+   "dur": 0.9,
+   "gain_db": -10
+  },
+  {
+   "t": 30.64,
+   "kind": "bolt_snap",
+   "gain_db": 0
+  },
+  {
+   "t": 31.42,
+   "kind": "hammer_hit",
+   "gain_db": -6
+  },
+  {
+   "t": 32.02,
+   "kind": "hammer_hit",
+   "gain_db": -6
+  },
+  {
+   "t": 32.62,
+   "kind": "hammer_hit",
+   "gain_db": -6
+  },
+  {
+   "t": 33.22,
+   "kind": "hammer_hit",
+   "gain_db": -6
+  },
+  {
+   "t": 33.82,
+   "kind": "hammer_hit",
+   "gain_db": -6
+  },
+  {
+   "t": 34.42,
+   "kind": "hammer_hit",
+   "gain_db": -6
+  },
+  {
+   "t": 34.6,
+   "kind": "breeze",
+   "dur": 6.4,
+   "gain_db": -8
+  },
+  {
+   "t": 34.7,
+   "kind": "rattle",
+   "dur": 5.5,
+   "gain_db": -14
+  },
+  {
+   "t": 44.95,
+   "kind": "whoosh",
+   "dur": 1.0,
+   "gain_db": -10
+  },
+  {
+   "t": 46.7,
+   "kind": "breeze",
+   "dur": 3.3,
+   "gain_db": -4
+  },
+  {
+   "t": 51.4,
+   "kind": "applause",
+   "dur": 2.4,
+   "gain_db": -6
+  },
+  {
+   "t": 53.7,
+   "kind": "creak",
+   "dur": 1.4,
+   "gain_db": -12
+  },
+  {
+   "t": 60.8,
+   "kind": "clink",
+   "dur": 0.8,
+   "gain_db": -10
+  },
+  {
+   "t": 62.4,
+   "kind": "applause",
+   "dur": 3.4,
+   "gain_db": -8
+  }
+ ]
+}
