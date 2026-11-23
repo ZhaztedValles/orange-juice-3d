@@ -47,6 +47,8 @@ import V022, { FRAMES as F022 } from "../videos/022-pearls-sugar-lumps/Video";
 import W022 from "../videos/022-pearls-sugar-lumps/words.json";
 import V023, { FRAMES as F023 } from "../videos/023-atlantic-cable-fire/Video";
 import W023 from "../videos/023-atlantic-cable-fire/words.json";
+import V024, { FRAMES as F024 } from "../videos/024-balloon-sponge-fire/Video";
+import W024 from "../videos/024-balloon-sponge-fire/words.json";
 
 export type VideoEntry = { id: string; Component: React.FC; frames: number; words: Word[] | null };
 
@@ -74,6 +76,7 @@ export const VIDEOS: VideoEntry[] = [
   { id: "021-moulins-zinc-balls", Component: V021, frames: F021, words: W021 as Word[] },
   { id: "022-pearls-sugar-lumps", Component: V022, frames: F022, words: W022 as Word[] },
   { id: "023-atlantic-cable-fire", Component: V023, frames: F023, words: W023 as Word[] },
+  { id: "024-balloon-sponge-fire", Component: V024, frames: F024, words: W024 as Word[] },
 ];
 
 import L0, { FRAMES as LF0 } from "../long/000-sample/ch1/Video";
