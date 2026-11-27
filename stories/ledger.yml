@@ -351,3 +351,18 @@
   date: "2026-11-24"
   kind: "true"
   category: invention
+- id: 028-voyager-light-day
+  claim: "On the eighteenth of November 2026 NASA's Voyager 1, launched in 1977, became the first human-made object to reach one light-day from Earth, about sixteen billion miles away, while since the fourteenth the Deep Space Network in Canberra had been receiving only its carrier signal with no science or engineering data, and NASA celebrated the milestone a day later, once the signal had arrived."
+  topics: [voyager-1, light-day, carrier-signal, deep-space-network]
+  sources:
+    - https://edition.cnn.com/2026/11/24/science/voyager-1-nasa-communication-breakdown-data-glitch
+    - https://www.scientificamerican.com/article/voyager-1-reaches-one-light-day-milestone/
+    - https://www.upi.com/Odd_News/2026/11/18/voyager-1-one-light-day-from-earth/5931795019381/
+    - https://science.nasa.gov/blogs/voyager/2026/11/18/voyager-1-engineers-analyze-data-issue-ready-to-confirm-light-day/
+  scores: {strange: 4, obscurity: 3, people: 4, visual: 4, provable: 5}
+  status: coded
+  reason: ""
+  video: 028-voyager-light-day
+  date: "2026-11-28"
+  kind: "news"
+  category: space
