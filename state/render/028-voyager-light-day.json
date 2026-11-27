@@ -1,0 +1,9 @@
+{
+ "status": "held",
+ "reasons": [
+  "50 unplanned black frames (max 3)"
+ ],
+ "attempts": 1,
+ "updated": "2026-11-27T23:21:24+00:00",
+ "source": "2ecca64a82b624c8b6908b65ac325ebf7a870ed5"
+}
