@@ -123,17 +123,16 @@ const drawSun = (p: Pen, n: number) => {
   p.ell(100, 100, 46, 46, "#ffd84a", 6);
   p.ell(86, 86, 14, 10, "#fff4c0", 0);
 };
-/** a pair of eyes in the dark (180 x 90): open looking dx, closed, flat (half-lidded) or wide */
-const drawEyes = (p: Pen, kind: "open" | "closed" | "flat" | "wide", dx: number) => {
+/** a pair of eyes in the dark (180 x 90): whites rx x ry, pupils pw x ph looking dx, pupils py down, a heavy lid line
+ * at alpha la (half-lidded); every value comes in small steps so a change of look eases over a few frames */
+const drawEyes = (p: Pen, rx: number, ry: number, pw: number, ph: number, py: number, la: number, dx: number) => {
   for (const cx of [50, 130]) {
-    if (kind === "closed") { p.line([[cx - 26, 48], [cx + 26, 48]], "#f6f2ea", 7, false); continue; }
-    const ry = kind === "wide" ? 36 : kind === "flat" ? 16 : 28, rx = kind === "wide" ? 30 : 26;
+    if (ry < 4) { p.line([[cx - 26, 48], [cx + 26, 48]], "#f6f2ea", 7, false); continue; }
     p.ell(cx, 46, rx, ry, "#f6f2ea", 0);
-    p.ell(cx + dx * 10, 46 + (kind === "flat" ? 4 : 0), kind === "wide" ? 8 : 11, kind === "flat" ? 10 : kind === "wide" ? 8 : 14, "#1a1626", 0);
-    if (kind === "flat") p.line([[cx - 28, 34], [cx + 28, 34]], "#2b2950", 10, false);
+    p.ell(cx + dx * 10, 46 + py, pw, Math.min(ph, ry), "#1a1626", 0);
+    if (la > 0.02) p.line([[cx - 28, 46 - ry + 2], [cx + 28, 46 - ry + 2]], `rgba(43,41,80,${la})`, 10, false);
   }
 };
-/** the crack and its beam (360 x 600): a jagged bright slit at the top, a soft shaft down to a pool on the floor */
 const drawBeam = (p: Pen, k: number) => {
   p.poly([[180, 20], [330, 560], [250, 590], [150, 40]], `rgba(255,226,140,${0.45 * k})`, 0);
   p.ell(280, 572, 80, 22, `rgba(255,232,160,${0.6 * k})`, 0);
@@ -204,10 +203,20 @@ const cap = (out: Stage, x: number, z: number, g = 1, y = Y, kid = false) => {
   if (g > 0.01) card(out, "cap", 240, 200, drawCap, x, y + (kid ? 1.42 : 1.9) + 0.04 * (1 - g), z + 0.06, (kid ? 0.42 : 0.56) * g, (kid ? 0.35 : 0.47) * g);
 };
 const crown = (out: Stage, x: number, y: number, z: number, g = 1) => card(out, "crown", 200, 140, drawCrown, x, y, z + 0.06, 0.4 * g, 0.28 * g);
-/** eyes in the dark at (x, y, z) for person i */
-const eyes = (out: Stage, t: number, i: number, x: number, y: number, kind: "open" | "flat" | "wide", dx = 0, s = 1) => {
-  const k = lidAt(t, i) > 0.5 ? "closed" : kind, dq = q(dx, 2);
-  card(out, `eyes${k}${dq}`, 180, 90, (pn) => drawEyes(pn, k, dq), x, y, DK[2] + 0.3 * (i % 3) - 0.3, 0.5 * s, 0.25 * s);
+/** eyes in the dark at (x, y, z) for person i. seq: the looks in order, [look, from (s)]; each change eases over 6 f */
+type EyeLook = "open" | "flat" | "wide";
+const LOOK: Record<EyeLook, number[]> = { open: [26, 28, 11, 14, 0, 0], wide: [30, 36, 8, 8, 0, 0], flat: [26, 16, 11, 10, 4, 1] };
+const eyes = (out: Stage, t: number, i: number, x: number, y: number, seq: [EyeLook, number][], dx = 0, s = 1) => {
+  let v = LOOK[seq[0][0]];
+  for (let j = 1; j < seq.length; j++) {
+    const k = smooth((t - seq[j][1] + 0.07) / 0.2), w = LOOK[seq[j][0]];
+    if (k > 0) v = v.map((a, n) => a + (w[n] - a) * k);
+  }
+  // a soft blink: the lid value averaged over 3 frames, so the eye closes and opens in small steps
+  const lid = (lidAt(t - 1 / 30, i) + lidAt(t, i) + lidAt(t + 1 / 30, i)) / 3;
+  const rx = Math.round(v[0]), ry = Math.round(v[1] * (1 - lid)), pw = Math.round(v[2]), ph = Math.round(v[3]);
+  const py = Math.round(v[4]), la = q(v[5] * (1 - lid), 8), dq = q(dx, 8);
+  card(out, `eyes${rx}_${ry}_${pw}_${ph}_${py}_${la}_${dq}`, 180, 90, (pn) => drawEyes(pn, rx, ry, pw, ph, py, la, dq), x, y, DK[2] + 0.3 * (i % 3) - 0.3, 0.5 * s, 0.25 * s);
 };
 const windowSpots: [number, number][] = [[-2.2, 3.6], [2.2, 3.6], [0, 4.6]];
 const windows = (out: Stage, t: number, id: number) => {
@@ -408,23 +417,27 @@ const darkSet = (id: number, t: number, _cam: CamInfo, out: Stage) => {
     const pairs: [number, number][] = [[-0.9, 1.85], [0.05, 2.1], [0.95, 1.8], [-0.45, 1.45], [0.6, 1.5]];
     pairs.forEach(([x, y], i) => {
       const g = grow(t, T_DARK - 0.4 + 0.12 * i, 0.25);
-      if (g > 0.02) eyes(out, t, i, dx + x, Y + y, su ? "flat" : sp ? "wide" : "open", Math.sin(t * 2 + i * 1.7), g);
+      // the pairs react one after another (2 f apart), so the whole room never changes in a single frame
+      const lag = (2 / 30) * i;
+      if (g > 0.02) eyes(out, t, i, dx + x, Y + y, [["open", 0], ["wide", T_SPECK + lag], ["flat", T_SUNNY + lag]], Math.sin(t * 2 + i * 1.7), g);
     });
   } else if (id === 10) {
     // they pour the sack out: the sunshine fizzles to nothing; "Still dark"
     const po = by(t, T_POURED), st = by(t, T_STILL);
     const pairs: [number, number][] = [[-0.75, 1.9], [0.25, 2.05], [0.95, 1.7]];
-    pairs.forEach(([x, y], i) => eyes(out, t, i, dx + x, Y + y, st ? "flat" : po ? "wide" : "open", -0.6 + 0.6 * i));
+    pairs.forEach(([x, y], i) => eyes(out, t, i, dx + x, Y + y, [["open", 0], ["wide", T_POURED + (2 / 30) * i], ["flat", T_STILL + (2 / 30) * i]], -0.6 + 0.6 * i));
     const tip = smooth((t - T_POURED + 0.07) / 0.3), sk = 1 - smooth((t - T_STILL + 0.07) / 0.25);
     card(out, `sackPour${q(tip, 4)}`, 160, 200, (pn) => drawSack(pn, 0, sk), dx - 0.3, Y + 1.25, DK[2] + 0.4, 0.42, 0.52);
     if (po && sk > 0.05) { const n = f12(t); card(out, `sun${n}`, 200, 200, (pn) => drawSun(pn, n), dx - 0.3, Y + 0.95 - 0.4 * tip, DK[2] + 0.45, 0.4 * sk, 0.4 * sk); }
   } else {
     // one councillor alone; a thin beam through a crack, his eyes go wide
-    const sa = by(t, T_SAW), bk = grow(t, T_BEAM - 0.3, 0.5), cr = by(t, T_CRACK);
-    card(out, `beam${q(bk, 8)}`, 360, 600, (pn) => drawBeam(pn, q(bk, 8)), dx - 0.45, Y + 1.75, DK[2] - 0.8, 2.0, 3.3, true);
-    eyes(out, t, 1, dx + 0.45, Y + 1.6, cr ? "wide" : sa ? "open" : "flat", sa ? -1 : 0, 1.15);
+    // the beam brightens slowly in fine steps (a coarse step over a black frame reads as a pop)
+    const bk = q(0.35 * grow(t, T_COUNCILLOR - 0.3, 0.9) + 0.65 * grow(t, T_BEAM - 0.5, 1.1), 48), cr = by(t, T_CRACK);
+    card(out, `beam${bk}`, 360, 600, (pn) => drawBeam(pn, bk), dx - 0.45, Y + 1.75, DK[2] - 0.8, 2.0, 3.3, true);
+    const look = smooth((t - T_SAW + 0.07) / 0.3);
+    eyes(out, t, 1, dx + 0.45, Y + 1.6, [["flat", 0], ["open", T_SAW], ["wide", T_CRACK]], -look, 1.15);
     if (cr) burst(out, [dx - 0.85, Y + 3.35, DK[2] - 0.75], t, T_CRACK - 0.05, 1.0, "#fff4c8");
-    void T_COUNCILLOR; void T_DARK3;
+    void T_DARK3;
   }
 };
 
