@@ -380,3 +380,17 @@
   date: "2026-11-28"
   kind: "true"
   category: food
+- id: 030-schilda-sunlight-sacks
+  claim: "Legend says the townsfolk of Schilda, the town of fools of a German chapbook first printed in 1597, chose to act foolish so princes would stop calling their wise men away, then built a new town hall with no windows and tried to carry daylight inside in sacks, tubs and even a mousetrap, until a crack in the wall showed them what they had forgotten."
+  topics: [schildburger, schilda, windowless-town-hall, daylight-in-sacks]
+  sources:
+    - https://projekt-gutenberg.org/authors/anonyme-oder-unbekannte-autoren/books/die-schildbuerger/chapter/12
+    - https://elfinspell.com/WitandHumor/12German/TheSchildburghers.html
+    - https://en.wikipedia.org/wiki/Schildb%C3%BCrger
+  scores: {strange: 5, obscurity: 4, people: 5, visual: 5, provable: 4}
+  status: coded
+  reason: ""
+  video: 030-schilda-sunlight-sacks
+  date: "2026-11-28"
+  kind: "legend"
+  category: folly
