@@ -98,7 +98,14 @@ const corkTex = () => ctex("cork028", 128, 128, (g, r) => {
 /** the starfield (equirectangular, tiled 4 x 2 on the sky sphere) */
 export const starTex = () => {
   const t = ctex("stars028", 1024, 512, (g, r) => {
-    g.fillStyle = "#000000"; g.fillRect(0, 0, 1024, 512);
+    // deep navy, never pure black (QA counts frames with mean luma < .04 as black frames), with faint violet haze
+    g.fillStyle = "#1a2856"; g.fillRect(0, 0, 1024, 512);
+    for (let i = 0; i < 6; i++) {
+      const x = 180 + r() * 664, y = 130 + r() * 252, rad = 90 + r() * 40;
+      const gr = g.createRadialGradient(x, y, 0, x, y, rad);
+      gr.addColorStop(0, "rgba(70,58,120,0.55)"); gr.addColorStop(1, "rgba(70,58,120,0)");
+      g.fillStyle = gr; g.fillRect(x - rad, y - rad, rad * 2, rad * 2);
+    }
     for (let i = 0; i < 420; i++) {
       const s = r() < 0.08 ? 3 : r() < 0.4 ? 2 : 1.2, c = r();
       g.fillStyle = c < 0.15 ? "#ffe2b0" : c < 0.3 ? "#cfe0ff" : "#ffffff";

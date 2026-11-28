@@ -57,6 +57,8 @@ import V027, { FRAMES as F027 } from "../videos/027-fire-plate-breakfast/Video";
 import W027 from "../videos/027-fire-plate-breakfast/words.json";
 import V028, { FRAMES as F028 } from "../videos/028-voyager-light-day/Video";
 import W028 from "../videos/028-voyager-light-day/words.json";
+import V029, { FRAMES as F029 } from "../videos/029-denby-dale-buried-pie/Video";
+import W029 from "../videos/029-denby-dale-buried-pie/words.json";
 
 export type VideoEntry = { id: string; Component: React.FC; frames: number; words: Word[] | null };
 
@@ -89,6 +91,7 @@ export const VIDEOS: VideoEntry[] = [
   { id: "026-tut-last-season", Component: V026, frames: F026, words: W026 as Word[] },
   { id: "027-fire-plate-breakfast", Component: V027, frames: F027, words: W027 as Word[] },
   { id: "028-voyager-light-day", Component: V028, frames: F028, words: W028 as Word[] },
+  { id: "029-denby-dale-buried-pie", Component: V029, frames: F029, words: W029 as Word[] },
 ];
 
 import L0, { FRAMES as LF0 } from "../long/000-sample/ch1/Video";
